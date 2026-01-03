@@ -12,20 +12,31 @@
 ## 2. The Mascot: "Monch"
 Monch is the heart of the UI. It is a reactive character that serves as the primary status indicator.
 
-### 2.1 Reactive States (The "Face" of the Data)
-Monch changes appearance based on the user's real-time metabolic context.
+### 2.1 Character Design
+**Inspiration:** Totodile × Gible — small, cute crocodilian/dragon creature with a BIG expressive mouth. The name "Monch" = "Munch" = chompy energy.
+
+**Key Features:**
+*   **Big Mouth:** The defining feature. Wide, expressive, can show teeth in a friendly way. Used for all emotional expression.
+*   **Small Body:** Compact, rounded body with stubby arms and legs. Top-heavy (big head, small body).
+*   **Fin/Ridge:** Small dorsal fin or head ridge (Gible-inspired) for silhouette distinction.
+*   **Tail:** Short, stubby tail with a small accent shape.
+*   **Eyes:** Large, round, expressive eyes above the snout.
+*   **Color:** Teal/aqua base (like Totodile) with cream belly accent. NOT the mood colors — Monch stays consistent, environment changes.
+
+### 2.2 Reactive States (The "Face" of the Data)
+Monch changes expression and pose based on the user's real-time metabolic context.
 
 | State | Trigger | Visual Description |
 |-------|---------|-------------------|
-| **Neutral** | Baseline | Happy, round, soft blob. Breathing slowly. |
-| **Hungry** | Ghrelin signal | Looking at a thought bubble of food. |
-| **Full / Digesting** | Lipid load | Rounder, slower animation, holding belly. |
-| **Spiking** | Sugar rush | Vibrating, wide-eyed, rapid color shifts. |
-| **Crashing** | Hypoglycemia | Melting into a puddle, dizzy eyes ("Snorlax" tired vibe). |
-| **Sleepy** | Circadian cue | Wearing a nightcap, eyes closing. |
-| **Strong** | Anabolic window | Flexing, glowing aura (post-workout). |
+| **Neutral** | Baseline | Content closed-mouth smile, relaxed pose, gentle idle animation (tail wag). |
+| **Hungry** | Ghrelin signal | Mouth WIDE open, drooling slightly, looking eagerly at a thought bubble of food. |
+| **Full / Digesting** | Lipid load | Satisfied grin, patting round belly, eyes squinting happily, slower movement. |
+| **Spiking** | Sugar rush | Mouth open in excited "RAWR!", vibrating, sparkles around, hyperactive energy. |
+| **Crashing** | Hypoglycemia | Droopy, mouth hanging open tiredly, dizzy spiral eyes, slumping pose. |
+| **Sleepy** | Circadian cue | Tiny nightcap, yawning (big mouth!), heavy eyelids, curled up pose. |
+| **Strong** | Anabolic window | Confident smirk, tiny flexing arms, power aura, triumphant pose. |
 
-### 2.2 Functional Role & Tone
+### 2.3 Functional Role & Tone
 *   **Visual Status:** Monch provides the *ambient context*. If Monch is sleepy, the user visually understands it's time to wind down without reading text.
 *   **Direct Coaching (Copy):** Text and Actions are always framed around the **User**, not the mascot.
     *   ❌ *Bad:* "Monch is hungry! Feed him!"
