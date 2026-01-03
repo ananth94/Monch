@@ -1,0 +1,35 @@
+# Xcode
+*.xcuserstate
+*.xcworkspacedata
+*.xcscmblueprint
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# macOS
+.DS_Store
+*.swp
+
+# IDE
+.idea/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Secrets (if any)
+*.env
+secrets/
