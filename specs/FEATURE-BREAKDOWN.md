@@ -48,6 +48,8 @@ Monch is an iOS application that transforms food logging from a chore into a **d
 | 16 | Mascot Header Component | UI | S |
 | 17 | Insight Card Component (Timeline) | UI | M |
 | 18 | Basic Navigation (Tab or Sheet) | UI | S |
+| 53 | Mascot Animation System | UI | M |
+| 54 | The Monch View (Expanded Detail) | UI | M |
 
 ### P1 — Should Have
 | # | Feature | Category | Effort |
@@ -529,6 +531,100 @@ Tab bar or sheet-based navigation between Timeline, Food Logger, and Settings.
 
 ---
 
+#### 53. Mascot Animation System
+
+**Priority**: P0  
+**Depends On**: #16 (Mascot Header), #4 (Design System)  
+**Estimated Effort**: M (2-4 hours)
+
+##### Description
+SwiftUI-based animation system that brings Monch to life using static assets + modifiers. No Lottie required.
+
+##### Animation Specifications (from Mascot_UX.md)
+
+**Global Idle Behaviors (All States)**
+- **Breathing**: `scaleEffect` pulse from 1.0 → 1.02 over 2.5s, repeating
+- **Floating**: Vertical `offset` oscillation of 2pt over 2s, repeating
+
+**State-Specific Animations**
+
+| State | Animation | SwiftUI Implementation |
+|-------|-----------|------------------------|
+| Neutral | Base Breath only | Default idle |
+| Hungry | Eager Bounce | 8pt vertical hop + slight rotation |
+| Digesting | Content Sway | Slow side-to-side rotationEffect (±5°) |
+| Spiking | Jitter/Vibration | High-freq offset jitter + Coral glow overlay |
+| Crashing | The "Melt" | Y-offset slump + 60% saturation |
+| Sleepy | The "Nod" | Head-heavy rotation (±10°) + slower breath |
+| Strong | Power Pulse | 1.1x scale expansion + Sage aura overlay |
+
+##### Acceptance Criteria
+- [ ] GIVEN any mascot state THEN breathing and floating animations are active
+- [ ] GIVEN state is `spiking` THEN high-frequency jitter and coral glow are visible
+- [ ] GIVEN state is `crashing` THEN mascot visually "melts" with desaturation
+- [ ] GIVEN state changes THEN animation transitions smoothly (spring interpolation)
+
+##### Technical Notes
+- Use `withAnimation(.spring())` for state transitions
+- Glow overlays via `Circle().blur()` behind mascot asset
+- Saturation control via `.saturation()` modifier
+
+---
+
+#### 54. The Monch View (Expanded Detail)
+
+**Priority**: P0  
+**Depends On**: #53 (Animation System), #15 (State Machine)  
+**Estimated Effort**: M (2-4 hours)
+
+##### Description
+Full-screen sheet that expands when user taps the Mascot Header. Provides deep context and coaching.
+
+##### Layout (from Mascot_UX.md)
+
+```
+┌─────────────────────────────┐
+│         [Drag Handle]       │
+│                             │
+│      ┌───────────────┐      │
+│      │   🐹 Monch    │      │  ← Hero Mascot (200x200, animated)
+│      │   (Animated)  │      │
+│      └───────────────┘      │
+│                             │
+│   "Your blood sugar might   │  ← Direct Coaching Text
+│    be spiking right now"    │
+│                             │
+│   Last meal: 45 min ago     │  ← Data Summary
+│   HR: +18 bpm from baseline │
+│                             │
+│  ┌─────────┐  ┌─────────┐   │  ← Quick Actions (contextual)
+│  │ Add Walk│  │ Dismiss │   │
+│  └─────────┘  └─────────┘   │
+└─────────────────────────────┘
+```
+
+##### Contextual Quick Actions by State
+
+| State | Primary Action | Secondary Action |
+|-------|----------------|------------------|
+| Neutral | "Log Meal" | — |
+| Hungry | "Log Meal" | "Set Reminder" |
+| Spiking | "Add Walk" | "Dismiss" |
+| Crashing | "Quick Snack" | "Dismiss" |
+| Sleepy | "Close Kitchen" | — |
+| Strong | "Log Protein" | — |
+| Digesting | — (view only) | — |
+
+##### Acceptance Criteria
+- [ ] GIVEN user taps Mascot Header THEN full-screen sheet presents
+- [ ] GIVEN sheet is open THEN 200x200 animated mascot is displayed
+- [ ] GIVEN state is `spiking` THEN coaching text explains HR velocity
+- [ ] GIVEN state is `hungry` THEN "Log Meal" button is prominent
+- [ ] GIVEN user taps action button THEN appropriate flow is triggered
+- [ ] GIVEN user swipes down THEN sheet dismisses
+
+---
+
 ### P1 Features (Should Have)
 
 ---
@@ -615,6 +711,8 @@ flowchart TD
         M --> O
         O --> P[16. Mascot Header]
         D --> P
+        P --> S[53. Animation System]
+        S --> T[54. The Monch View]
     end
     
     subgraph Display
@@ -654,7 +752,9 @@ flowchart TD
 **Sprint 5: Feedback (Week 5)**
 16. Mascot State Machine (#15)
 17. Mascot Header Component (#16)
-18. Insight Card Component (#17)
+18. Mascot Animation System (#53)
+19. The Monch View (#54)
+20. Insight Card Component (#17)
 
 ---
 
