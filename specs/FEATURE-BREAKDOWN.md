@@ -69,6 +69,7 @@ Monch is an iOS application that transforms food logging from a chore into a **d
 | 33 | Hypnogram Visualization | UI | M |
 | 34 | Historical Date Navigation | UI | S |
 | 35 | Meal Edit/Delete (Swipe Actions) | Input | S |
+| 52 | Summary Views (Day/Week/Month) | UI | M |
 
 ### P2 — Nice to Have
 | # | Feature | Category | Effort |
@@ -166,11 +167,19 @@ Define the local persistence schema using SwiftData for iOS 17+.
 **MealLog**
 - `id`: UUID
 - `timestamp`: Date
-- `carbs`: Double (grams)
-- `fat`: Double (grams)
-- `protein`: Double (grams)
 - `name`: String
+- `calories`: Double?
+- `carbs`: Double? (grams)
+- `fat`: Double? (grams)
+- `protein`: Double? (grams)
+- `fiber`: Double? (grams)
+- `sugar`: Double? (grams)
+- `caffeine`: Double? (mg) — for Caffeine Jitter insight
+- `magnesium`: Double? (mg) — for Mineral Gap insight
+- `zinc`: Double? (mg) — for Mineral Gap insight
 - `contextTags`: [String] (e.g., "refeed", "circadian")
+
+> **Note:** Micronutrients are optional. OpenFoodFacts provides them when available; USDA has more complete micronutrient data.
 
 **InsightEvent**
 - `id`: UUID
@@ -517,6 +526,56 @@ Tab bar or sheet-based navigation between Timeline, Food Logger, and Settings.
 ##### Acceptance Criteria
 - [ ] GIVEN the user is on Timeline WHEN they tap the log button THEN the food logger appears
 - [ ] GIVEN the user is in the logger WHEN they save THEN they return to Timeline
+
+---
+
+### P1 Features (Should Have)
+
+---
+
+#### 52. Summary Views (Day/Week/Month)
+
+**Priority**: P1  
+**Depends On**: #3 (SwiftData), #5 (Timeline), #11-14 (Insight Detectors)  
+**Estimated Effort**: M (2-4 hours)
+
+##### Description
+Aggregated summary views showing trends and totals across different time periods. Accessible via segmented control or swipe navigation from the Timeline.
+
+##### Views
+
+**Day Summary**
+- Total macros (carbs/fat/protein/calories)
+- Meal count and timing distribution
+- Insight count by type (spikes, refeeds, etc.)
+- Sleep quality (if available)
+- Mascot mood history
+
+**Week Summary**
+- Daily macro averages with trend arrows
+- Insight frequency chart (bar chart by day)
+- Best/worst days highlighted
+- Patterns detected (e.g., "Late meals on weekends")
+
+**Month Summary**
+- Weekly aggregates
+- Rolling averages (7-day, 30-day)
+- Streak tracking (e.g., "15 days without late-night eating")
+- Mineral Gap / chronic loop indicators
+
+##### Acceptance Criteria
+- [ ] GIVEN the user is on Timeline WHEN they tap "Summary" or swipe THEN the Day Summary appears
+- [ ] GIVEN Day Summary is visible WHEN user taps Week/Month THEN the view switches
+- [ ] GIVEN a week of data exists THEN macro averages and insight counts are calculated correctly
+- [ ] GIVEN no data for a period THEN an appropriate empty state is shown
+
+##### Edge Cases
+- Partial data (started mid-week) → Show available data with "incomplete" indicator
+- Very long history (6+ months) → Lazy load, don't fetch all at once
+
+##### Technical Notes
+- Use SwiftData `@Query` with date predicates for aggregation
+- Consider caching daily summaries for performance
 
 ---
 
