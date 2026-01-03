@@ -2,7 +2,8 @@
 //  MealLog.swift
 //  monch
 //
-//  Created by Opencode Agent on 03/01/2026.
+//  SwiftData model for food/meal logging.
+//  Supports macros, micronutrients, and context tagging.
 //
 
 import Foundation
@@ -14,17 +15,58 @@ final class MealLog {
     var timestamp: Date
     var name: String
     
-    // Macros (Optional because quick-adds might not have full data)
+    // MARK: - Macronutrients
+    
+    /// Total calories (kcal)
     var calories: Double?
+    
+    /// Carbohydrates (grams)
     var carbs: Double?
+    
+    /// Protein (grams)
     var protein: Double?
+    
+    /// Fat (grams)
     var fat: Double?
     
-    // Context Tags (Computed by ContextEngine)
-    // "refeed", "late_night", "caffeine", "high_sugar"
+    /// Dietary fiber (grams)
+    var fiber: Double?
+    
+    /// Total sugars (grams) — for Sugar Spike insight
+    var sugar: Double?
+    
+    // MARK: - Micronutrients (for Mineral Gap / Caffeine insights)
+    
+    /// Caffeine content (mg) — for Caffeine Jitter insight
+    var caffeine: Double?
+    
+    /// Magnesium (mg) — for Mineral Gap insight
+    var magnesium: Double?
+    
+    /// Zinc (mg) — for Mineral Gap insight
+    var zinc: Double?
+    
+    // MARK: - Context
+    
+    /// Tags computed by ContextEngine: "refeed", "late_night", "caffeine", "high_sugar"
     var contextTags: [String] = []
     
-    init(timestamp: Date = Date(), name: String, calories: Double? = nil, carbs: Double? = nil, protein: Double? = nil, fat: Double? = nil, tags: [String] = []) {
+    // MARK: - Initialization
+    
+    init(
+        timestamp: Date = Date(),
+        name: String,
+        calories: Double? = nil,
+        carbs: Double? = nil,
+        protein: Double? = nil,
+        fat: Double? = nil,
+        fiber: Double? = nil,
+        sugar: Double? = nil,
+        caffeine: Double? = nil,
+        magnesium: Double? = nil,
+        zinc: Double? = nil,
+        tags: [String] = []
+    ) {
         self.id = UUID()
         self.timestamp = timestamp
         self.name = name
@@ -32,6 +74,44 @@ final class MealLog {
         self.carbs = carbs
         self.protein = protein
         self.fat = fat
+        self.fiber = fiber
+        self.sugar = sugar
+        self.caffeine = caffeine
+        self.magnesium = magnesium
+        self.zinc = zinc
         self.contextTags = tags
+    }
+}
+
+// MARK: - Computed Properties
+
+extension MealLog {
+    /// Check if this is a high-carb meal (threshold for Sugar Spike detection)
+    var isHighCarb: Bool {
+        (carbs ?? 0) > 30
+    }
+    
+    /// Check if this is a high-fat meal (threshold for Lipid Load detection)
+    var isHighFat: Bool {
+        (fat ?? 0) > 25
+    }
+    
+    /// Check if this is a high-protein meal (threshold for Metabolic Burn detection)
+    var isHighProtein: Bool {
+        (protein ?? 0) > 35
+    }
+    
+    /// Total macros available (for display purposes)
+    var hasMacros: Bool {
+        carbs != nil || protein != nil || fat != nil
+    }
+    
+    /// Formatted macro string for display
+    var macroSummary: String {
+        var parts: [String] = []
+        if let c = carbs { parts.append("\(Int(c))g carbs") }
+        if let p = protein { parts.append("\(Int(p))g protein") }
+        if let f = fat { parts.append("\(Int(f))g fat") }
+        return parts.isEmpty ? "No macro data" : parts.joined(separator: " • ")
     }
 }

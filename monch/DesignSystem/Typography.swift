@@ -104,11 +104,8 @@ extension MonchFont {
 
 // MARK: - Text Style Modifier
 extension Text {
-    /// Apply Monch typography style with consistent lowercase headers
-    func monchStyle(_ font: Font, lowercase: Bool = false) -> Text {
-        if lowercase {
-            return self.font(font).textCase(.lowercase)
-        }
-        return self.font(font)
+    /// Apply Monch typography style
+    func monchStyle(_ font: Font) -> Text {
+        self.font(font)
     }
 }

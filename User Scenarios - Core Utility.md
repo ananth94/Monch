@@ -174,3 +174,40 @@ ananth: Maybe the above can be a feature for later - we should mark it as a P1, 
 *   **Insight:** *"Performance Fueling. Your muscles are soaking this up—no sugar crash expected."*
 *   **Outcome:** User feels guilt-free about the carbs, reinforcing positive fueling behavior.
 
+---
+
+## 9. Summary Views (The Retrospective Lens)
+*Stepping back from the river to see the landscape.*
+
+### 9.1 The Day Summary
+*   **Scenario:** User finishes logging dinner and wants to see how the day totaled up.
+*   **Action:** User taps "Summary" or swipes left on the Timeline.
+*   **Visual:** A compact view showing:
+    *   **Macro Ring Chart** — Total Carbs/Fat/Protein filled in
+    *   **Insight Badges** — Small icons for Sugar Spikes (coral), Refeeds (green), Debt (purple)
+    *   **Sleep Preview** — If morning data exists
+*   **Outcome:** User gets a "day in review" without scrolling the entire timeline.
+
+### 9.2 The Week Summary
+*   **Scenario:** It's Sunday. User wants to understand their weekly patterns.
+*   **Action:** User navigates to Week view via a segmented control.
+*   **Visual:**
+    *   **7-Day Bar Chart** — Each day shows macro distribution stacked
+    *   **Trend Arrows** — ↑↓ vs. previous week (Carbs down 12%, Protein up 8%)
+    *   **Pattern Cards** — *"Late meals detected Fri/Sat"* or *"Refeed timing improved"*
+*   **Outcome:** User spots behavioral patterns they wouldn't see day-by-day.
+
+### 9.3 The Month Summary
+*   **Scenario:** User wants to check progress over a longer horizon.
+*   **Action:** User navigates to Month view.
+*   **Visual:**
+    *   **Calendar Heat Map** — Days colored by "metabolic quality" (green/yellow/red)
+    *   **30-Day Streaks** — *"18 days without late-night eating"*
+    *   **Chronic Insights** — Mineral Gap indicators, consistent patterns
+*   **Outcome:** User sees long-term trends and streak motivation.
+
+### 9.4 Empty State Handling
+*   **Scenario:** User has only 3 days of data and taps Week Summary.
+*   **Visual:** Partial chart with ghosted days + prompt: *"Keep logging—patterns emerge after 7 days."*
+*   **Outcome:** Sets expectations without feeling broken.
+
