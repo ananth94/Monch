@@ -131,7 +131,7 @@ struct FoodCardView: View {
     var body: some View {
         CardDetailShell(
             title: meal.name,
-            icon: "🍽️",
+            icon: meal.mealType?.icon ?? "🍽️",
             timestamp: meal.timestamp,
             contextTag: contextTag,
             mood: cardMood,

@@ -20,6 +20,9 @@ struct FoodSearchView: View {
                 // Search Bar
                 searchBar
                 
+                // Meal Type Selector
+                mealTypeSelector
+                
                 // Cart summary (if items exist)
                 if !viewModel.cart.isEmpty {
                     cartSummaryBar
@@ -72,6 +75,35 @@ struct FoodSearchView: View {
         }
         .padding()
         .background(Color.primary.opacity(0.05))
+    }
+    
+    private var mealTypeSelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(MealLog.MealType.allCases, id: \.self) { type in
+                    Button {
+                        viewModel.selectedMealType = type
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(type.icon)
+                            Text(type.rawValue)
+                                .font(.Monch.caption2)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.selectedMealType == type ? Color.Monch.sage : Color.primary.opacity(0.05))
+                        )
+                        .foregroundStyle(viewModel.selectedMealType == type ? .white : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
+        .background(Color.primary.opacity(0.02))
     }
     
     // MARK: - Search Results

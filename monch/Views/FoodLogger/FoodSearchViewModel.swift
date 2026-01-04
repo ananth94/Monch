@@ -17,6 +17,7 @@ class FoodSearchViewModel: ObservableObject {
     @Published var isSearching = false
     @Published var error: Error?
     @Published var cart: [CartItem] = []
+    @Published var selectedMealType: MealLog.MealType = .breakfast
     
     // MARK: - Private
     
@@ -26,6 +27,19 @@ class FoodSearchViewModel: ObservableObject {
     init() {
         // Set up debounced search
         setupSearchObserver()
+        self.selectedMealType = guessMealType()
+    }
+    
+    private func guessMealType() -> MealLog.MealType {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<10: return .breakfast
+        case 10..<12: return .morningSnack
+        case 12..<14: return .lunch
+        case 14..<17: return .afternoonSnack
+        case 17..<21: return .dinner
+        default: return .eveningSnack
+        }
     }
     
     private func setupSearchObserver() {
@@ -159,6 +173,7 @@ class FoodSearchViewModel: ObservableObject {
         return MealLog(
             name: name,
             quantity: finalQuantity,
+            mealType: selectedMealType,
             calories: totalCalories > 0 ? totalCalories : nil,
             carbs: totalCarbs > 0 ? totalCarbs : nil,
             protein: totalProtein > 0 ? totalProtein : nil,
