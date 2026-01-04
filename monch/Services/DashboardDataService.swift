@@ -55,10 +55,16 @@ class DashboardDataService: ObservableObject {
             goodSleep: goodSleep
         )
         
-        // Zone 2 minutes (HR Zone 2 workouts)
-        let zone2Minutes = todayWorkouts
-            .filter { $0.dominantHRZone == 2 }
-            .reduce(0) { $0 + Int($1.duration / 60) }
+        // Zone 2 minutes (Granular sum from heart rate breakdown)
+        let zone2Minutes = todayWorkouts.reduce(0) { total, workout in
+            if let breakdown = workout.hrZoneBreakdown {
+                return total + breakdown.zone2Minutes
+            } else if workout.dominantHRZone == 2 {
+                // Fallback for logs with dominant zone but no specific breakdown data
+                return total + Int(workout.duration / 60)
+            }
+            return total
+        }
         
         return TodaySummary(
             vibe: vibe,
