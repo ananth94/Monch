@@ -216,6 +216,10 @@ private struct NutrimentsDTO: Decodable, Sendable {
     let proteins100g: Double?
     let fiber100g: Double?
     let caffeine100g: Double?
+    let sodium100g: Double?
+    let magnesium100g: Double?
+    let zinc100g: Double?
+    let iron100g: Double?
     
     // Per serving values (preferred when available)
     let energyKcalServing: Double?
@@ -224,6 +228,10 @@ private struct NutrimentsDTO: Decodable, Sendable {
     let fatServing: Double?
     let proteinsServing: Double?
     let fiberServing: Double?
+    let sodiumServing: Double?
+    let magnesiumServing: Double?
+    let zincServing: Double?
+    let ironServing: Double?
     
     enum CodingKeys: String, CodingKey {
         case energyKcal100g = "energy-kcal_100g"
@@ -233,6 +241,10 @@ private struct NutrimentsDTO: Decodable, Sendable {
         case proteins100g = "proteins_100g"
         case fiber100g = "fiber_100g"
         case caffeine100g = "caffeine_100g"
+        case sodium100g = "sodium_100g"
+        case magnesium100g = "magnesium_100g"
+        case zinc100g = "zinc_100g"
+        case iron100g = "iron_100g"
         
         case energyKcalServing = "energy-kcal_serving"
         case carbohydratesServing = "carbohydrates_serving"
@@ -240,6 +252,10 @@ private struct NutrimentsDTO: Decodable, Sendable {
         case fatServing = "fat_serving"
         case proteinsServing = "proteins_serving"
         case fiberServing = "fiber_serving"
+        case sodiumServing = "sodium_serving"
+        case magnesiumServing = "magnesium_serving"
+        case zincServing = "zinc_serving"
+        case ironServing = "iron_serving"
     }
 }
 
@@ -261,6 +277,10 @@ struct FoodItem: Identifiable, Equatable, Sendable {
     let protein: Double?
     let fiber: Double?
     let caffeine: Double?
+    let sodium: Double?
+    let magnesium: Double?
+    let zinc: Double?
+    let iron: Double?
     
     /// Whether nutrition data is per serving (true) or per 100g (false)
     let isPerServing: Bool
@@ -281,6 +301,10 @@ struct FoodItem: Identifiable, Equatable, Sendable {
                 self.fat = nutriments.fatServing
                 self.protein = nutriments.proteinsServing
                 self.fiber = nutriments.fiberServing
+                self.sodium = nutriments.sodiumServing
+                self.magnesium = nutriments.magnesiumServing
+                self.zinc = nutriments.zincServing
+                self.iron = nutriments.ironServing
                 self.caffeine = nutriments.caffeine100g // Caffeine usually only per 100g
                 self.isPerServing = true
             } else {
@@ -290,6 +314,10 @@ struct FoodItem: Identifiable, Equatable, Sendable {
                 self.fat = nutriments.fat100g
                 self.protein = nutriments.proteins100g
                 self.fiber = nutriments.fiber100g
+                self.sodium = nutriments.sodium100g
+                self.magnesium = nutriments.magnesium100g
+                self.zinc = nutriments.zinc100g
+                self.iron = nutriments.iron100g
                 self.caffeine = nutriments.caffeine100g
                 self.isPerServing = false
             }
@@ -300,13 +328,17 @@ struct FoodItem: Identifiable, Equatable, Sendable {
             self.fat = nil
             self.protein = nil
             self.fiber = nil
+            self.sodium = nil
+            self.magnesium = nil
+            self.zinc = nil
+            self.iron = nil
             self.caffeine = nil
             self.isPerServing = false
         }
     }
     
     // Manual initializer for quick-add items
-    init(id: String = UUID().uuidString, name: String, brand: String? = nil, servingSize: String? = nil, imageURL: URL? = nil, calories: Double? = nil, carbs: Double? = nil, sugar: Double? = nil, fat: Double? = nil, protein: Double? = nil, fiber: Double? = nil, caffeine: Double? = nil) {
+    init(id: String = UUID().uuidString, name: String, brand: String? = nil, servingSize: String? = nil, imageURL: URL? = nil, calories: Double? = nil, carbs: Double? = nil, sugar: Double? = nil, fat: Double? = nil, protein: Double? = nil, fiber: Double? = nil, caffeine: Double? = nil, sodium: Double? = nil, magnesium: Double? = nil, zinc: Double? = nil, iron: Double? = nil) {
         self.id = id
         self.name = name
         self.brand = brand
@@ -319,6 +351,10 @@ struct FoodItem: Identifiable, Equatable, Sendable {
         self.protein = protein
         self.fiber = fiber
         self.caffeine = caffeine
+        self.sodium = sodium
+        self.magnesium = magnesium
+        self.zinc = zinc
+        self.iron = iron
         self.isPerServing = true
     }
 }

@@ -57,11 +57,15 @@ final class MealLog {
     /// Tags computed by ContextEngine: "refeed", "late_night", "caffeine", "high_sugar"
     var contextTags: [String] = []
     
+    /// The quantity or serving size multiplier (e.g., 1.0, 2.0, 0.5)
+    var quantity: Double = 1.0
+    
     // MARK: - Initialization
     
     init(
         timestamp: Date = Date(),
         name: String,
+        quantity: Double = 1.0,
         calories: Double? = nil,
         carbs: Double? = nil,
         protein: Double? = nil,
@@ -78,6 +82,7 @@ final class MealLog {
         self.id = UUID()
         self.timestamp = timestamp
         self.name = name
+        self.quantity = quantity
         self.calories = calories
         self.carbs = carbs
         self.protein = protein

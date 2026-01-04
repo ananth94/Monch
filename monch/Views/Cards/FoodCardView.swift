@@ -19,10 +19,23 @@ struct FoodCardView: View {
     
     // MARK: - State
     
-    @State private var servingMultiplier: Double = 1.0
+    @State private var servingMultiplier: Double
     @State private var showMicronutrients = false
     
-    private let servingOptions: [Double] = [0.5, 1.0, 1.5, 2.0]
+    private var servingOptions: [Double] {
+        var options: [Double] = [0.5, 1.0, 1.5, 2.0]
+        if !options.contains(meal.quantity) {
+            options.append(meal.quantity)
+            options.sort()
+        }
+        return options
+    }
+    
+    init(meal: MealLog, onDelete: @escaping () -> Void) {
+        self.meal = meal
+        self.onDelete = onDelete
+        self._servingMultiplier = State(initialValue: meal.quantity)
+    }
     
     // MARK: - Computed Properties
     
@@ -37,50 +50,71 @@ struct FoodCardView: View {
     /// Determine mood based on meal composition
     private var cardMood: GradientMood {
         guard let carbs = meal.carbs else { return .neutral }
-        if carbs > 50 { return .acute }  // High carb = potential spike
+        // Scale threshold by multiplier to stay accurate to the current view
+        if (carbs * servingMultiplier / meal.quantity) > 50 { return .acute }
         return .neutral
     }
     
-    // Scaled values
+    // Scaled values (relative to the persisted baseline in the model)
     private var scaledCalories: Double? {
         guard let v = meal.calories else { return nil }
-        return v * servingMultiplier
+        return v * (servingMultiplier / meal.quantity)
     }
     
     private var scaledCarbs: Double? {
         guard let v = meal.carbs else { return nil }
-        return v * servingMultiplier
+        return v * (servingMultiplier / meal.quantity)
     }
     
     private var scaledProtein: Double? {
         guard let v = meal.protein else { return nil }
-        return v * servingMultiplier
+        return v * (servingMultiplier / meal.quantity)
     }
     
     private var scaledFat: Double? {
         guard let v = meal.fat else { return nil }
-        return v * servingMultiplier
+        return v * (servingMultiplier / meal.quantity)
     }
     
     private var scaledFiber: Double? {
         guard let v = meal.fiber else { return nil }
-        return v * servingMultiplier
+        return v * (servingMultiplier / meal.quantity)
     }
     
     private var scaledSugar: Double? {
         guard let v = meal.sugar else { return nil }
-        return v * servingMultiplier
+        return v * (servingMultiplier / meal.quantity)
     }
     
     private var scaledCaffeine: Double? {
         guard let v = meal.caffeine else { return nil }
-        return v * servingMultiplier
+        return v * (servingMultiplier / meal.quantity)
+    }
+    
+    private var scaledSodium: Double? {
+        guard let v = meal.sodium else { return nil }
+        return v * (servingMultiplier / meal.quantity)
+    }
+    
+    private var scaledMagnesium: Double? {
+        guard let v = meal.magnesium else { return nil }
+        return v * (servingMultiplier / meal.quantity)
+    }
+    
+    private var scaledZinc: Double? {
+        guard let v = meal.zinc else { return nil }
+        return v * (servingMultiplier / meal.quantity)
+    }
+    
+    private var scaledIron: Double? {
+        guard let v = meal.iron else { return nil }
+        return v * (servingMultiplier / meal.quantity)
     }
     
     // MARK: - Body
     
     private var isModified: Bool {
-        servingMultiplier != 1.0
+        abs(servingMultiplier - meal.quantity) > 0.01
     }
     
     private var primaryActionLabel: String? {
@@ -140,6 +174,7 @@ struct FoodCardView: View {
         if value == 1.0 { return "1" }
         if value == 1.5 { return "1½" }
         if value == 2.0 { return "2" }
+        if value == floor(value) { return "\(Int(value))" }
         return String(format: "%.1f", value)
     }
     
@@ -216,17 +251,17 @@ struct FoodCardView: View {
                             MicroRow(label: "Caffeine", value: "\(Int(caffeine))mg")
                         }
                         
-                        if let mg = meal.magnesium {
-                            MicroRow(label: "Magnesium", value: "\(Int(mg * servingMultiplier))mg")
+                        if let mg = scaledMagnesium {
+                            MicroRow(label: "Magnesium", value: "\(Int(mg))mg")
                         }
-                        if let zn = meal.zinc {
-                            MicroRow(label: "Zinc", value: "\(Int(zn * servingMultiplier))mg")
+                        if let zn = scaledZinc {
+                            MicroRow(label: "Zinc", value: "\(Int(zn))mg")
                         }
-                        if let na = meal.sodium {
-                            MicroRow(label: "Sodium", value: "\(Int(na * servingMultiplier))mg")
+                        if let na = scaledSodium {
+                            MicroRow(label: "Sodium", value: "\(Int(na))mg")
                         }
-                        if let fe = meal.iron {
-                            MicroRow(label: "Iron", value: "\(Int(fe * servingMultiplier))mg")
+                        if let fe = scaledIron {
+                            MicroRow(label: "Iron", value: "\(Int(fe))mg")
                         }
                     }
                 }
@@ -237,7 +272,9 @@ struct FoodCardView: View {
     // MARK: - Actions
     
     private func saveChanges() {
-        meal.scaleServingSize(by: servingMultiplier)
+        let scalingFactor = servingMultiplier / meal.quantity
+        meal.scaleServingSize(by: scalingFactor)
+        meal.quantity = servingMultiplier
         dismiss()
     }
 }

@@ -146,16 +146,30 @@ class FoodSearchViewModel: ObservableObject {
         let totalFiber = cart.compactMap(\.scaledFiber).reduce(0, +)
         let totalSugar = cart.compactMap(\.scaledSugar).reduce(0, +)
         let totalCaffeine = cart.compactMap(\.scaledCaffeine).reduce(0, +)
+        let totalSodium = cart.compactMap(\.scaledSodium).reduce(0, +)
+        let totalMagnesium = cart.compactMap(\.scaledMagnesium).reduce(0, +)
+        let totalZinc = cart.compactMap(\.scaledZinc).reduce(0, +)
+        let totalIron = cart.compactMap(\.scaledIron).reduce(0, +)
+        
+        // For quantity tracking in detail view:
+        // If it's a single type of item, use its quantity.
+        // Otherwise use 1.0 (as the aggregated log is its own new "baseline").
+        let finalQuantity = cart.count == 1 ? Double(cart.first!.quantity) : 1.0
         
         return MealLog(
             name: name,
+            quantity: finalQuantity,
             calories: totalCalories > 0 ? totalCalories : nil,
             carbs: totalCarbs > 0 ? totalCarbs : nil,
             protein: totalProtein > 0 ? totalProtein : nil,
             fat: totalFat > 0 ? totalFat : nil,
             fiber: totalFiber > 0 ? totalFiber : nil,
             sugar: totalSugar > 0 ? totalSugar : nil,
-            caffeine: totalCaffeine > 0 ? totalCaffeine : nil
+            caffeine: totalCaffeine > 0 ? totalCaffeine : nil,
+            magnesium: totalMagnesium > 0 ? totalMagnesium : nil,
+            zinc: totalZinc > 0 ? totalZinc : nil,
+            sodium: totalSodium > 0 ? totalSodium : nil,
+            iron: totalIron > 0 ? totalIron : nil
         )
     }
 }

@@ -56,4 +56,24 @@ struct CartItem: Identifiable {
         guard let v = foodItem.caffeine else { return nil }
         return v * Double(quantity)
     }
+    
+    var scaledSodium: Double? {
+        guard let v = foodItem.sodium else { return nil }
+        return v * Double(quantity)
+    }
+    
+    var scaledMagnesium: Double? {
+        guard let v = foodItem.magnesium else { return nil }
+        return v * Double(quantity)
+    }
+    
+    var scaledZinc: Double? {
+        guard let v = foodItem.zinc else { return nil }
+        return v * Double(quantity)
+    }
+    
+    var scaledIron: Double? {
+        guard let v = foodItem.iron else { return nil }
+        return v * Double(quantity)
+    }
 }
