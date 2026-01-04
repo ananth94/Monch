@@ -44,13 +44,25 @@ class InsightEngine: ObservableObject {
     func analyzeMeal(_ meal: MealLog, in modelContext: ModelContext) async -> [InsightEvent] {
         var insights: [InsightEvent] = []
         
-        // Check for Sugar Spike (high carbs + sedentary + HR spike)
-        if let sugarSpike = await detectSugarSpike(for: meal) {
-            insights.append(sugarSpike)
-            modelContext.insert(sugarSpike)
+        // Phase 1: Apply context tags FIRST
+        await applyContextTags(to: meal, modelContext: modelContext)
+        
+        // Phase 2: Check for Muscle Sponge (post-workout anabolic window)
+        if let muscleSponge = await detectMuscleSponge(for: meal, modelContext: modelContext) {
+            insights.append(muscleSponge)
+            modelContext.insert(muscleSponge)
         }
         
-        // Check for Digestion Debt (late eating)
+        // Phase 3: Check for Sugar Spike (with Good Spike suppression)
+        // Skip if in exercise context OR if meal is tagged as "refeed"
+        if !meal.autoTags.contains("refeed") {
+            if let sugarSpike = await detectSugarSpike(for: meal, modelContext: modelContext) {
+                insights.append(sugarSpike)
+                modelContext.insert(sugarSpike)
+            }
+        }
+        
+        // Phase 4: Check for Digestion Debt (late eating)
         if let digestionDebt = await detectDigestionDebt(for: meal) {
             insights.append(digestionDebt)
             modelContext.insert(digestionDebt)
@@ -95,8 +107,13 @@ class InsightEngine: ObservableObject {
     /// - Trigger: meal.carbs > 30g
     /// - Window: 0-60 min post-meal
     /// - Logic: peak HR > baseline + 15bpm AND time_to_peak < 40min
-    /// - Gate: steps < 10 (sedentary)
-    private func detectSugarSpike(for meal: MealLog) async -> InsightEvent? {
+    /// - Gate: steps < 10 (sedentary), NOT in exercise context (Good Spike suppression)
+    private func detectSugarSpike(for meal: MealLog, modelContext: ModelContext) async -> InsightEvent? {
+        // Good Spike Suppression: Skip if user is exercising or just finished
+        if await isInExerciseContext(at: meal.timestamp, modelContext: modelContext) {
+            return nil
+        }
+        
         // Check carb threshold
         guard let carbs = meal.carbs, carbs > 30 else { return nil }
         
@@ -231,6 +248,119 @@ class InsightEngine: ObservableObject {
             return .sleepy
         case .muscleSponge, .goodSpike:
             return .strong
+        }
+    }
+    
+    // MARK: - Muscle Sponge Detection (P0)
+    
+    /// Detect if user is in anabolic window (post-workout)
+    /// Algorithm from Insights_Library.md §6:
+    /// - Trigger: Workout ends
+    /// - Condition: ActiveEnergy > 300kcal OR HR_Max > Zone 3
+    /// - Window: workout_end to workout_end + 120 min
+    private func detectMuscleSponge(for meal: MealLog, modelContext: ModelContext) async -> InsightEvent? {
+        // Query recent workouts where meal timestamp falls within anabolic window
+        let mealTime = meal.timestamp
+        
+        let predicate = #Predicate<WorkoutLog> { workout in
+            workout.anabolicWindowEnd > mealTime && workout.endTime < mealTime
+        }
+        
+        do {
+            let workouts = try modelContext.fetch(FetchDescriptor<WorkoutLog>(predicate: predicate))
+            
+            // Find a qualifying workout
+            guard let workout = workouts.first(where: { qualifyingWorkout($0) }) else {
+                return nil
+            }
+            
+            // Muscle Sponge detected!
+            let remainingWindow = workout.anabolicWindowEnd.timeIntervalSince(mealTime)
+            let remainingMins = Int(remainingWindow / 60)
+            
+            return InsightEvent(
+                type: .muscleSponge,
+                severity: 0.3, // Positive insight
+                message: "Your muscles are hungry! Carbs now fuel recovery, not fat. Window closes in \(remainingMins) min.",
+                associatedMealID: meal.id
+            )
+        } catch {
+            print("InsightEngine: Failed to query workouts: \(error)")
+            return nil
+        }
+    }
+    
+    /// Check if workout qualifies for anabolic window (300kcal+ OR Zone 3+)
+    func qualifyingWorkout(_ workout: WorkoutLog) -> Bool {
+        let calorieThreshold = (workout.activeCalories ?? 0) >= 300
+        let zoneThreshold = (workout.dominantHRZone ?? 0) >= 3
+        return calorieThreshold || zoneThreshold
+    }
+    
+    // MARK: - Good Spike Suppression (P0)
+    
+    /// Check if user is exercising or in cool-down period
+    /// Used to suppress Sugar Spike alerts during/after exercise
+    private func isInExerciseContext(at time: Date, modelContext: ModelContext) async -> Bool {
+        // 30-minute cool-down window after workout
+        let thirtyMinsBefore = time.addingTimeInterval(-1800)
+        
+        // SwiftData predicates can't use addingTimeInterval inside - must precalculate
+        let predicate = #Predicate<WorkoutLog> { workout in
+            workout.startTime < time && workout.endTime > thirtyMinsBefore
+        }
+        
+        do {
+            let workouts = try modelContext.fetch(FetchDescriptor<WorkoutLog>(predicate: predicate))
+            return !workouts.isEmpty
+        } catch {
+            return false
+        }
+    }
+    
+    // MARK: - Context Tagging
+    
+    /// Apply automatic context tags to a meal
+    private func applyContextTags(to meal: MealLog, modelContext: ModelContext) async {
+        var tags: [String] = []
+        
+        // Check for refeed (anabolic window)
+        if await isInAnabolicWindow(at: meal.timestamp, modelContext: modelContext) {
+            tags.append("refeed")
+        }
+        
+        // Circadian tags
+        let hour = Calendar.current.component(.hour, from: meal.timestamp)
+        if hour >= 21 || hour < 5 {
+            tags.append("late-night")
+        } else if hour >= 5 && hour < 10 {
+            tags.append("breakfast")
+        } else if hour >= 11 && hour < 14 {
+            tags.append("lunch")
+        } else if hour >= 17 && hour < 21 {
+            tags.append("dinner")
+        }
+        
+        // High-carb tag
+        if let carbs = meal.carbs, carbs > 50 {
+            tags.append("high-carb")
+        }
+        
+        meal.autoTags = tags
+    }
+    
+    /// Check if timestamp falls within any workout's anabolic window
+    func isInAnabolicWindow(at time: Date, modelContext: ModelContext) async -> Bool {
+        let predicate = #Predicate<WorkoutLog> { workout in
+            workout.endTime < time && workout.anabolicWindowEnd > time
+        }
+        
+        do {
+            let workouts = try modelContext.fetch(FetchDescriptor<WorkoutLog>(predicate: predicate))
+            // Also check intensity threshold
+            return workouts.contains(where: { qualifyingWorkout($0) })
+        } catch {
+            return false
         }
     }
 }
