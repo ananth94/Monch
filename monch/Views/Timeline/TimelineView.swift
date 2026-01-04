@@ -481,8 +481,9 @@ struct InsightTimelineCard: View {
     private var insightColor: Color {
         switch insight.type {
         case .sugarSpike, .anxietyMimic: return Color.Monch.coral
+        case .caffeineJitter: return Color.Monch.sage // Positive/alert state
         case .digestionDebt, .deepSleepRobber: return Color.Monch.periwinkle
-        case .muscleSponge, .goodSpike: return Color.Monch.sage
+        case .muscleSponge, .goodSpike, .zone2Drain: return Color.Monch.sage
         }
     }
 }
