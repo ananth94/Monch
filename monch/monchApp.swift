@@ -28,6 +28,11 @@ struct monchApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onAppear {
+                    Task {
+                        await HealthKitManager.shared.requestAuthorization()
+                    }
+                }
         }
         .modelContainer(sharedModelContainer)
     }
