@@ -51,6 +51,8 @@ class InsightEngine: ObservableObject {
         if let muscleSponge = await detectMuscleSponge(for: meal, modelContext: modelContext) {
             insights.append(muscleSponge)
             modelContext.insert(muscleSponge)
+            // Send notification for positive reinforcement
+            NotificationManager.shared.notifyMuscleSponge()
         }
         
         // Phase 3: Check for Sugar Spike (with Good Spike suppression)
@@ -59,6 +61,8 @@ class InsightEngine: ObservableObject {
             if let sugarSpike = await detectSugarSpike(for: meal, modelContext: modelContext) {
                 insights.append(sugarSpike)
                 modelContext.insert(sugarSpike)
+                // Send notification alert
+                NotificationManager.shared.notifySugarSpike(mealName: meal.name)
             }
         }
         
@@ -66,6 +70,8 @@ class InsightEngine: ObservableObject {
         if let digestionDebt = await detectDigestionDebt(for: meal) {
             insights.append(digestionDebt)
             modelContext.insert(digestionDebt)
+            // Send notification (will appear next morning)
+            NotificationManager.shared.notifyDigestionDebt()
         }
         
         // Update mascot mood based on insights

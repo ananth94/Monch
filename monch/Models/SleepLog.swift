@@ -60,6 +60,9 @@ final class SleepLog {
     /// HealthKit source bundle identifier (e.g., "com.apple.health")
     var sourceBundleId: String?
     
+    /// Whether this sleep was manually entered (vs synced from HealthKit)
+    var isManualEntry: Bool
+    
     // MARK: - Initialization
     
     init(
@@ -72,7 +75,8 @@ final class SleepLog {
         awakeMinutes: Int = 0,
         qualityScore: Double? = nil,
         notes: String? = nil,
-        sourceBundleId: String? = nil
+        sourceBundleId: String? = nil,
+        isManualEntry: Bool = false
     ) {
         precondition(endTime >= startTime, "Sleep end time must be after or equal to start time")
         self.id = id
@@ -87,6 +91,7 @@ final class SleepLog {
         self.notes = notes
         self.healthKitSyncDate = Date()
         self.sourceBundleId = sourceBundleId
+        self.isManualEntry = isManualEntry
     }
 }
 

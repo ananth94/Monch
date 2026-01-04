@@ -20,10 +20,14 @@ struct TimelineView: View {
     
     @State private var showingMascotDetail = false
     @State private var showingFoodLogger = false
+    @State private var showingExerciseLogger = false
+    @State private var showingSleepLogger = false
     @State private var selectedMeal: MealLog?
     @State private var selectedInsight: InsightEvent?
     @State private var selectedWorkout: WorkoutLog?
     @State private var selectedSleep: SleepLog?
+    @State private var selectedDate: Date = Date()
+    @State private var showingDatePicker = false
     
     var body: some View {
         NavigationStack {
@@ -55,12 +59,36 @@ struct TimelineView: View {
                     }
                 }
             }
-            .navigationTitle("Timeline")
+            .navigationTitle(selectedDate.isToday ? "Timeline" : selectedDate.formatted(date: .abbreviated, time: .omitted))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .navigation) {
                     Button {
-                        showingFoodLogger = true
+                        showingDatePicker = true
+                    } label: {
+                        Image(systemName: "calendar")
+                            .foregroundStyle(selectedDate.isToday ? .secondary : Color.Monch.sage)
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button {
+                            showingFoodLogger = true
+                        } label: {
+                            Label("Log Meal", systemImage: "fork.knife")
+                        }
+                        
+                        Button {
+                            showingExerciseLogger = true
+                        } label: {
+                            Label("Log Exercise", systemImage: "figure.run")
+                        }
+                        
+                        Button {
+                            showingSleepLogger = true
+                        } label: {
+                            Label("Log Sleep", systemImage: "moon.zzz")
+                        }
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
@@ -80,6 +108,18 @@ struct TimelineView: View {
                     Task {
                         await insightEngine.analyzeMeal(meal, in: modelContext)
                     }
+                }
+            }
+            .sheet(isPresented: $showingExerciseLogger) {
+                ExerciseLogView { workout in
+                    // Trigger muscle sponge check via insight engine
+                    insightEngine.refreshMood(meals: meals, insights: insights)
+                }
+            }
+            .sheet(isPresented: $showingSleepLogger) {
+                SleepLogView { _ in
+                    // Sleep logged, refresh timeline
+                    insightEngine.refreshMood(meals: meals, insights: insights)
                 }
             }
             .onAppear {
@@ -113,6 +153,9 @@ struct TimelineView: View {
             }
             .sheet(item: $selectedSleep) { sleep in
                 SleepCardView(sleepLog: sleep)
+            }
+            .sheet(isPresented: $showingDatePicker) {
+                DatePickerSheet(selectedDate: $selectedDate)
             }
         }
     }
@@ -166,10 +209,23 @@ struct TimelineView: View {
     // MARK: - Data Grouping
     
     private var timelineItems: [TimelineItem] {
-        let mealItems = meals.map { TimelineItem.meal($0) }
-        let insightItems = insights.filter { !$0.isDismissed }.map { TimelineItem.insight($0) }
-        let workoutItems = workouts.map { TimelineItem.workout($0) }
-        let sleepItems = sleepLogs.map { TimelineItem.sleep($0) }
+        let calendar = Calendar.current
+        let startOfSelectedDay = calendar.startOfDay(for: selectedDate)
+        let endOfSelectedDay = calendar.date(byAdding: .day, value: 1, to: startOfSelectedDay)!
+        
+        // Filter items to selected day (or show all if today for real-time feel)
+        let mealItems = meals
+            .filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
+            .map { TimelineItem.meal($0) }
+        let insightItems = insights
+            .filter { !$0.isDismissed && calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
+            .map { TimelineItem.insight($0) }
+        let workoutItems = workouts
+            .filter { calendar.isDate($0.startTime, inSameDayAs: selectedDate) }
+            .map { TimelineItem.workout($0) }
+        let sleepItems = sleepLogs
+            .filter { calendar.isDate($0.endTime, inSameDayAs: selectedDate) } // Wake time = selected day
+            .map { TimelineItem.sleep($0) }
         return (mealItems + insightItems + workoutItems + sleepItems).sorted { $0.timestamp > $1.timestamp }
     }
     
@@ -569,6 +625,52 @@ struct FoodLoggerPlaceholder: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Date Extension
+
+extension Date {
+    var isToday: Bool {
+        Calendar.current.isDateInToday(self)
+    }
+}
+
+// MARK: - Date Picker Sheet
+
+struct DatePickerSheet: View {
+    @Binding var selectedDate: Date
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack {
+                DatePicker(
+                    "Select Date",
+                    selection: $selectedDate,
+                    in: ...Date(),
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .padding()
+                
+                Button("Go to Today") {
+                    selectedDate = Date()
+                    dismiss()
+                }
+                .font(.Monch.callout)
+                .foregroundStyle(Color.Monch.sage)
+                .padding(.bottom)
+            }
+            .navigationTitle("Select Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 
