@@ -12,6 +12,7 @@ import HealthKit
 protocol HealthKitDataProvider: Sendable {
     func fetchHeartRateSamples(for range: ClosedRange<Date>) async throws -> [HeartRateSample]
     func fetchSleepSamples(for range: ClosedRange<Date>) async throws -> [SleepSample]
+    func fetchBaselineRestingHeartRate(for range: ClosedRange<Date>) async throws -> Double?
 }
 
 /// Simplified heart rate sample for cross-boundary use
@@ -147,6 +148,29 @@ extension HealthKitManager: HealthKitDataProvider {
             )
         }
     }
+    
+    nonisolated func fetchBaselineRestingHeartRate(for range: ClosedRange<Date>) async throws -> Double? {
+        let restingHRType = HKQuantityType(.restingHeartRate)
+        let predicate = HKQuery.predicateForSamples(withStart: range.lowerBound, end: range.upperBound)
+        
+        let samples: [HKQuantitySample] = try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: restingHRType,
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: samples as? [HKQuantitySample] ?? [])
+            }
+            self.healthStore.execute(query)
+        }
+        
+        return samples.first?.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+    }
 }
 
 // MARK: - Mock Implementation for Testing
@@ -168,5 +192,9 @@ final class MockHealthKitDataProvider: HealthKitDataProvider, @unchecked Sendabl
             throw NSError(domain: "MockError", code: -1)
         }
         return sleepSamples.filter { range.contains($0.startDate) }
+    }
+    
+    func fetchBaselineRestingHeartRate(for range: ClosedRange<Date>) async throws -> Double? {
+        return 65.0 // Mock resting HR
     }
 }

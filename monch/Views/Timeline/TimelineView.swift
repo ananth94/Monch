@@ -15,6 +15,7 @@ struct TimelineView: View {
     @Query(sort: \InsightEvent.timestamp, order: .reverse) private var insights: [InsightEvent]
     @Query(sort: \WorkoutLog.startTime, order: .reverse) private var workouts: [WorkoutLog]
     @Query(sort: \SleepLog.startTime, order: .reverse) private var sleepLogs: [SleepLog]
+    @Query(sort: \VibeCheck.timestamp, order: .reverse) private var vibeChecks: [VibeCheck]
     @ObservedObject private var healthKit = HealthKitManager.shared
     @ObservedObject private var insightEngine = InsightEngine.shared
     
@@ -29,6 +30,7 @@ struct TimelineView: View {
     @State private var selectedInsight: InsightEvent?
     @State private var selectedWorkout: WorkoutLog?
     @State private var selectedSleep: SleepLog?
+    @State private var selectedVibe: VibeCheck?
     @State private var selectedDate: Date = Date()
     @State private var showingDatePicker = false
     
@@ -232,7 +234,8 @@ struct TimelineView: View {
                                 onMealTap: { selectedMeal = $0 },
                                 onInsightTap: { selectedInsight = $0 },
                                 onWorkoutTap: { selectedWorkout = $0 },
-                                onSleepTap: { selectedSleep = $0 }
+                                onSleepTap: { selectedSleep = $0 },
+                                onVibeTap: { selectedVibe = $0 }
                             )
                             .padding(.horizontal)
                             .padding(.vertical, 6)
@@ -268,7 +271,10 @@ struct TimelineView: View {
         let sleepItems = sleepLogs
             .filter { calendar.isDate($0.endTime, inSameDayAs: selectedDate) } // Wake time = selected day
             .map { TimelineItem.sleep($0) }
-        return (mealItems + insightItems + workoutItems + sleepItems).sorted { $0.timestamp > $1.timestamp }
+        let vibeItems = vibeChecks
+            .filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
+            .map { TimelineItem.vibe($0) }
+        return (mealItems + insightItems + workoutItems + sleepItems + vibeItems).sorted { $0.timestamp > $1.timestamp }
     }
     
     private var groupedByDay: [(key: Date, value: [TimelineItem])] {
@@ -323,6 +329,7 @@ enum TimelineItem: Identifiable {
     case insight(InsightEvent)
     case workout(WorkoutLog)
     case sleep(SleepLog)
+    case vibe(VibeCheck)
     
     var id: UUID {
         switch self {
@@ -330,6 +337,7 @@ enum TimelineItem: Identifiable {
         case .insight(let insight): return insight.id
         case .workout(let workout): return workout.id
         case .sleep(let sleep): return sleep.id
+        case .vibe(let vibe): return vibe.id
         }
     }
     
@@ -339,6 +347,7 @@ enum TimelineItem: Identifiable {
         case .insight(let insight): return insight.timestamp
         case .workout(let workout): return workout.startTime
         case .sleep(let sleep): return sleep.startTime
+        case .vibe(let vibe): return vibe.timestamp
         }
     }
 }
@@ -351,6 +360,7 @@ struct TimelineItemRow: View {
     var onInsightTap: ((InsightEvent) -> Void)?
     var onWorkoutTap: ((WorkoutLog) -> Void)?
     var onSleepTap: ((SleepLog) -> Void)?
+    var onVibeTap: ((VibeCheck) -> Void)?
     
     var body: some View {
         switch item {
@@ -366,6 +376,9 @@ struct TimelineItemRow: View {
         case .sleep(let sleep):
             SleepTimelineCard(sleep: sleep)
                 .onTapGesture { onSleepTap?(sleep) }
+        case .vibe(let vibe):
+            VibeTimelineCard(vibe: vibe)
+                .onTapGesture { onVibeTap?(vibe) }
         }
     }
 }
@@ -627,6 +640,70 @@ struct SleepTimelineCard: View {
     }
 }
 
+// MARK: - Vibe Timeline Card
+
+struct VibeTimelineCard: View {
+    let vibe: VibeCheck
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Time
+            Text(vibe.timestamp, format: .dateTime.hour().minute())
+                .font(.Monch.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 50, alignment: .leading)
+            
+            // Emoji
+            Text(vibe.emoji)
+                .font(.title2)
+            
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Vibe Check: \(vibe.label)")
+                    .font(.Monch.headline)
+                
+                HStack(spacing: 8) {
+                    VibeScalePill(label: "Energy", score: vibe.energy, color: .orange)
+                    VibeScalePill(label: "Focus", score: vibe.focus, color: Color.Monch.sage)
+                    VibeScalePill(label: "Mood", score: vibe.mood, color: Color.Monch.periwinkle)
+                }
+                
+                if let note = vibe.note {
+                    Text(note)
+                        .font(.Monch.caption)
+                        .foregroundStyle(.secondary)
+                        .italic()
+                        .padding(.top, 2)
+                }
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Monch.periwinkle.opacity(0.1))
+        )
+        .contentShape(Rectangle())
+    }
+}
+
+private struct VibeScalePill: View {
+    let label: String
+    let score: Int
+    let color: Color
+    
+    var body: some View {
+        Text("\(label) \(score)/5")
+            .font(.Monch.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.1))
+            .clipShape(Capsule())
+    }
+}
+
 private struct SleepStagePill: View {
     let label: String
     let minutes: Int
@@ -721,5 +798,5 @@ struct DatePickerSheet: View {
 
 #Preview {
     TimelineView()
-        .modelContainer(for: [MealLog.self, InsightEvent.self, WorkoutLog.self, SleepLog.self], inMemory: true)
+        .modelContainer(for: [MealLog.self, InsightEvent.self, WorkoutLog.self, SleepLog.self, VibeCheck.self], inMemory: true)
 }

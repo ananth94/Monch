@@ -152,5 +152,5 @@ struct CaffeineQuickAddView: View {
 
 #Preview {
     CaffeineQuickAddView()
-        .modelContainer(for: MealLog.self, inMemory: true)
+        .modelContainer(for: [MealLog.self, InsightEvent.self], inMemory: true)
 }

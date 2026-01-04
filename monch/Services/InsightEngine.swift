@@ -433,19 +433,24 @@ class InsightEngine: ObservableObject {
         
         // Check for elevated HR
         let recentRange = Date().addingTimeInterval(-1800)...Date()
+        let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
         
         do {
             let recentHR = try await healthKitProvider.fetchHeartRateSamples(for: recentRange)
+            let restingHR = try await healthKitProvider.fetchBaselineRestingHeartRate(for: baselineRange) ?? 65.0
+            
             guard !recentHR.isEmpty else { return nil }
             
             let avgHR = recentHR.map(\.bpm).reduce(0, +) / Double(recentHR.count)
             
-            // Elevated if >80 bpm at rest (simplified)
-            if avgHR > 80 {
+            // Dynamic threshold: restingHR + 15 bpm
+            let threshold = restingHR + 15
+            
+            if avgHR > threshold {
                 return InsightEvent(
                     timestamp: Date(),
                     type: .caffeineJitter,
-                    severity: min((avgHR - 70) / 30, 1.0),
+                    severity: min((avgHR - threshold) / 30.0, 1.0),
                     message: "Alert mode activated! That's \(Int(recentCaffeine))mg of caffeine working. Great time for focused work.",
                     associatedMealID: meals.first?.id
                 )
@@ -500,7 +505,7 @@ class InsightEngine: ObservableObject {
             let sleepLogs = try modelContext.fetch(FetchDescriptor<SleepLog>(predicate: sleepPredicate))
             let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
             
-            guard sleepLogs.count >= 5 else { return nil } // Need enough data
+            guard sleepLogs.count >= 4 else { return nil } // Relaxed to 4 days
             
             // Calculate average deep sleep
             let deepSleepMinutes = sleepLogs.compactMap { Double($0.deepSleepMinutes ?? 0) }.reduce(0, +)
