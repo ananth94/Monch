@@ -550,10 +550,6 @@ struct WorkoutTimelineCard: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
             
-            // Icon
-            Text(workout.category.icon)
-                .font(.title2)
-            
             // Content
             VStack(alignment: .leading, spacing: 4) {
                 Text(workout.activityName)
