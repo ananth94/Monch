@@ -291,7 +291,7 @@ class InsightEngine: ObservableObject {
     }
     
     /// Check if workout qualifies for anabolic window (300kcal+ OR Zone 3+)
-    private func qualifyingWorkout(_ workout: WorkoutLog) -> Bool {
+    func qualifyingWorkout(_ workout: WorkoutLog) -> Bool {
         let calorieThreshold = (workout.activeCalories ?? 0) >= 300
         let zoneThreshold = (workout.dominantHRZone ?? 0) >= 3
         return calorieThreshold || zoneThreshold
@@ -350,7 +350,7 @@ class InsightEngine: ObservableObject {
     }
     
     /// Check if timestamp falls within any workout's anabolic window
-    private func isInAnabolicWindow(at time: Date, modelContext: ModelContext) async -> Bool {
+    func isInAnabolicWindow(at time: Date, modelContext: ModelContext) async -> Bool {
         let predicate = #Predicate<WorkoutLog> { workout in
             workout.endTime < time && workout.anabolicWindowEnd > time
         }

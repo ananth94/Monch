@@ -178,6 +178,36 @@ final class InsightEngineTests: XCTestCase {
         engine.refreshMood(meals: [recentMeal], insights: [])
         XCTAssertEqual(engine.currentMood, .digesting)
     }
+    
+    // MARK: - Muscle Sponge / Anabolic Window Tests
+    
+    @MainActor
+    func testQualifyingWorkoutThresholds() {
+        let engine = InsightEngine.shared
+        
+        // 1. Calories threshold (exactly 300)
+        let workout1 = WorkoutLog(type: .running, startTime: Date(), endTime: Date(), activeCalories: 300)
+        XCTAssertTrue(engine.qualifyingWorkout(workout1), "Exactly 300kcal should qualify")
+        
+        // 2. Calories below threshold
+        let workout2 = WorkoutLog(type: .running, startTime: Date(), endTime: Date(), activeCalories: 299)
+        XCTAssertFalse(engine.qualifyingWorkout(workout2), "299kcal should not qualify if zone is low")
+        
+        // 3. Zone threshold (exactly 3)
+        let workout3 = WorkoutLog(type: .running, startTime: Date(), endTime: Date(), activeCalories: 100)
+        workout3.dominantHRZone = 3
+        XCTAssertTrue(engine.qualifyingWorkout(workout3), "Zone 3 should qualify even with low calories")
+        
+        // 4. Zone below threshold
+        let workout4 = WorkoutLog(type: .running, startTime: Date(), endTime: Date(), activeCalories: 100)
+        workout4.dominantHRZone = 2
+        XCTAssertFalse(engine.qualifyingWorkout(workout4), "Zone 2 with low calories should not qualify")
+        
+        // 5. Both thresholds met
+        let workout5 = WorkoutLog(type: .running, startTime: Date(), endTime: Date(), activeCalories: 500)
+        workout5.dominantHRZone = 4
+        XCTAssertTrue(engine.qualifyingWorkout(workout5), "Meeting both thresholds should qualify")
+    }
 }
 
 // MARK: - Test Helpers
