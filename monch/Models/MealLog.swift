@@ -14,6 +14,27 @@ final class MealLog {
     var id: UUID
     var timestamp: Date
     var name: String
+    var mealType: MealType?
+    
+    enum MealType: String, Codable, CaseIterable {
+        case breakfast = "Breakfast"
+        case morningSnack = "Morning Snack"
+        case lunch = "Lunch"
+        case afternoonSnack = "Afternoon Snack"
+        case dinner = "Dinner"
+        case eveningSnack = "Evening Snack"
+        
+        var icon: String {
+            switch self {
+            case .breakfast: return "☀️"
+            case .morningSnack: return "☕"
+            case .lunch: return "🍽️"
+            case .afternoonSnack: return "🍎"
+            case .dinner: return "🍴"
+            case .eveningSnack: return "🌙"
+            }
+        }
+    }
     
     // MARK: - Macronutrients
     
@@ -74,6 +95,7 @@ final class MealLog {
         timestamp: Date = Date(),
         name: String,
         quantity: Double = 1.0,
+        mealType: MealType? = nil,
         calories: Double? = nil,
         carbs: Double? = nil,
         protein: Double? = nil,
@@ -91,6 +113,7 @@ final class MealLog {
         self.timestamp = timestamp
         self.name = name
         self.quantity = quantity
+        self.mealType = mealType
         self.calories = calories
         self.carbs = carbs
         self.protein = protein
