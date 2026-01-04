@@ -54,141 +54,45 @@ class HealthKitSyncService: ObservableObject {
         let now = Date()
         let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
         
+        // 1. Fetch authoritative data from HealthKit
         let samples = try await fetchSleepSamples(from: sevenDaysAgo, to: now)
         let sleepSessions = groupSleepSamplesIntoSessions(samples)
         
-        for session in sleepSessions {
-            await upsertSleepLog(session, modelContext: modelContext)
-        }
-        
-        lastSleepSyncDate = now
-    }
-    
-    /// Sync only workout data (last 7 days)
-    func syncWorkoutData(modelContext: ModelContext) async throws {
-        let calendar = Calendar.current
-        let now = Date()
-        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
-        
-        let workouts = try await fetchWorkouts(from: sevenDaysAgo, to: now)
-        
-        for workout in workouts {
-            await upsertWorkoutLog(workout, modelContext: modelContext)
-        }
-        
-        lastWorkoutSyncDate = now
-    }
-    
-    // MARK: - HealthKit Fetching
-    
-    private func fetchSleepSamples(from startDate: Date, to endDate: Date) async throws -> [HKCategorySample] {
-        let sleepType = HKCategoryType(.sleepAnalysis)
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(
-                sampleType: sleepType,
-                predicate: predicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
-            ) { _, samples, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                continuation.resume(returning: samples as? [HKCategorySample] ?? [])
-            }
-            healthStore.execute(query)
-        }
-    }
-    
-    private func fetchWorkouts(from startDate: Date, to endDate: Date) async throws -> [HKWorkout] {
-        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(
-                sampleType: HKWorkoutType.workoutType(),
-                predicate: predicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]
-            ) { _, samples, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                continuation.resume(returning: samples as? [HKWorkout] ?? [])
-            }
-            healthStore.execute(query)
-        }
-    }
-    
-    // MARK: - Sleep Processing
-    
-    /// Group individual sleep samples into coherent sleep sessions
-    private func groupSleepSamplesIntoSessions(_ samples: [HKCategorySample]) -> [SleepSession] {
-        guard !samples.isEmpty else { return [] }
-        
-        // Group samples by night (consider sleep starting before 4am as previous day)
-        var sessionsByNight: [Date: [HKCategorySample]] = [:]
-        let calendar = Calendar.current
-        
-        for sample in samples {
-            let hour = calendar.component(.hour, from: sample.startDate)
-            var sessionDate = calendar.startOfDay(for: sample.startDate)
-            
-            // If before 4am, attribute to previous night
-            if hour < 4 {
-                sessionDate = calendar.date(byAdding: .day, value: -1, to: sessionDate) ?? sessionDate
-            }
-            
-            sessionsByNight[sessionDate, default: []].append(sample)
-        }
-        
-        // Convert grouped samples into sessions
-        return sessionsByNight.compactMap { (nightDate, nightSamples) -> SleepSession? in
-            guard let earliest = nightSamples.min(by: { $0.startDate < $1.startDate }),
-                  let latest = nightSamples.max(by: { $0.endDate < $1.endDate }) else {
-                return nil
-            }
-            
-            return SleepSession(
-                nightDate: nightDate,
-                startTime: earliest.startDate,
-                endTime: latest.endDate,
-                samples: nightSamples
-            )
-        }.sorted { $0.startTime > $1.startTime }
-    }
-    
-    /// Upsert a sleep session into SwiftData
-    private func upsertSleepLog(_ session: SleepSession, modelContext: ModelContext) async {
-        // Check if we already have this sleep session
-        let startOfNight = session.startTime
+        // 2. Fetch existing local data for the same period
         let predicate = #Predicate<SleepLog> { log in
-            log.startTime >= startOfNight
+            log.startTime >= sevenDaysAgo
         }
-        
         let descriptor = FetchDescriptor<SleepLog>(predicate: predicate)
+        let existingLogs = try modelContext.fetch(descriptor)
         
-        do {
-            let existing = try modelContext.fetch(descriptor)
-            
-            // Find by approximate start time (within 30 min)
-            let match = existing.first { abs($0.startTime.timeIntervalSince(session.startTime)) < 1800 }
-            
-            if let sleepLog = match {
-                // Update existing
-                updateSleepLog(sleepLog, from: session)
-            } else {
-                // Insert new
-                let sleepLog = createSleepLog(from: session)
-                modelContext.insert(sleepLog)
+        var touchedLogIds = Set<UUID>()
+        
+        // 3. Match and Update/Insert
+        for session in sleepSessions {
+            // Find match by start time proximity (standard sync practice)
+            let match = existingLogs.first { log in
+                abs(log.startTime.timeIntervalSince(session.startTime)) < 1800 // 30 mins tolerance
             }
             
-            try modelContext.save()
-        } catch {
-            print("HealthKitSyncService: Failed to upsert SleepLog - \(error)")
+            if let log = match {
+                updateSleepLog(log, from: session)
+                touchedLogIds.insert(log.id)
+            } else {
+                let newLog = createSleepLog(from: session)
+                modelContext.insert(newLog)
+                touchedLogIds.insert(newLog.id)
+            }
         }
+        
+        // 4. Prune obsolete logs (e.g. phantom fragments from previous bugs, or deleted sessions)
+        for log in existingLogs {
+            if !touchedLogIds.contains(log.id) {
+                modelContext.delete(log)
+            }
+        }
+        
+        try modelContext.save()
+        lastSleepSyncDate = now
     }
     
     private func createSleepLog(from session: SleepSession) -> SleepLog {
