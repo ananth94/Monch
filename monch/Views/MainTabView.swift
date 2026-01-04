@@ -31,6 +31,10 @@ enum AppTab: String, CaseIterable {
 struct MainTabView: View {
     @State private var selectedTab: AppTab = .timeline
     @State private var timelineDate: Date? = nil
+    @State private var showStreakCelebration = false
+    
+    @Query(sort: \MealLog.timestamp, order: .reverse) private var meals: [MealLog]
+    @ObservedObject private var streakTracker = StreakTracker.shared
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -52,6 +56,34 @@ struct MainTabView: View {
                 .tag(AppTab.dashboard)
         }
         .tint(Color.Monch.sage)
+        .onAppear {
+            streakTracker.updateStreak(meals: meals)
+            checkForCelebration()
+        }
+        .onChange(of: meals.count) { _, _ in
+            streakTracker.updateStreak(meals: meals)
+            checkForCelebration()
+        }
+        .fullScreenCover(isPresented: $showStreakCelebration) {
+            if let milestone = streakTracker.pendingMilestone {
+                StreakCelebrationView(
+                    milestone: milestone,
+                    streakCount: streakTracker.currentStreak
+                ) {
+                    streakTracker.dismissMilestone()
+                    showStreakCelebration = false
+                }
+            }
+        }
+    }
+    
+    private func checkForCelebration() {
+        if streakTracker.pendingMilestone != nil {
+            // Slight delay for UX
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showStreakCelebration = true
+            }
+        }
     }
 }
 

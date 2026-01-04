@@ -55,12 +55,24 @@ struct TimelineView: View {
                     .padding(.top, 8)
                     
                     // Timeline Content
-                    if timelineItems.isEmpty {
-                        EmptyTimelineView {
-                            showingFoodLogger = true
+                    GeometryReader { geometry in
+                        ZStack {
+                            // River background
+                            RiverSplineView(
+                                itemCount: timelineItems.count,
+                                mood: insightEngine.currentMood,
+                                geometry: geometry
+                            )
+                            
+                            // Timeline items
+                            if timelineItems.isEmpty {
+                                EmptyTimelineView {
+                                    showingFoodLogger = true
+                                }
+                            } else {
+                                timelineList
+                            }
                         }
-                    } else {
-                        timelineList
                     }
                 }
             }
@@ -228,9 +240,10 @@ struct TimelineView: View {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(groupedByDay, id: \.key) { day, items in
                     Section {
-                        ForEach(items.sorted(by: { $0.timestamp > $1.timestamp })) { item in
+                        ForEach(Array(items.sorted(by: { $0.timestamp > $1.timestamp }).enumerated()), id: \.element.id) { index, item in
                             TimelineItemRow(
                                 item: item,
+                                cardIndex: index,
                                 onMealTap: { selectedMeal = $0 },
                                 onInsightTap: { selectedInsight = $0 },
                                 onWorkoutTap: { selectedWorkout = $0 },
@@ -356,6 +369,7 @@ enum TimelineItem: Identifiable {
 
 struct TimelineItemRow: View {
     let item: TimelineItem
+    var cardIndex: Int = 0
     var onMealTap: ((MealLog) -> Void)?
     var onInsightTap: ((InsightEvent) -> Void)?
     var onWorkoutTap: ((WorkoutLog) -> Void)?
@@ -366,18 +380,23 @@ struct TimelineItemRow: View {
         switch item {
         case .meal(let meal):
             MealCard(meal: meal)
+                .riverCardStyle(index: cardIndex, type: .meal)
                 .onTapGesture { onMealTap?(meal) }
         case .insight(let insight):
             InsightTimelineCard(insight: insight)
+                .riverCardStyle(index: cardIndex, type: .insight)
                 .onTapGesture { onInsightTap?(insight) }
         case .workout(let workout):
             WorkoutTimelineCard(workout: workout)
+                .riverCardStyle(index: cardIndex, type: .workout)
                 .onTapGesture { onWorkoutTap?(workout) }
         case .sleep(let sleep):
             SleepTimelineCard(sleep: sleep)
+                .riverCardStyle(index: cardIndex, type: .sleep)
                 .onTapGesture { onSleepTap?(sleep) }
         case .vibe(let vibe):
             VibeTimelineCard(vibe: vibe)
+                .riverCardStyle(index: cardIndex, type: .vibe)
                 .onTapGesture { onVibeTap?(vibe) }
         }
     }
@@ -390,6 +409,12 @@ struct MealCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
+            // Kawaii meal icon
+            Image("meal_kawaii")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 36, height: 36)
+            
             // Time
             Text(meal.timestamp, format: .dateTime.hour().minute())
                 .font(.Monch.caption)
@@ -442,10 +467,6 @@ struct MealCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
-        )
         .contentShape(Rectangle())
     }
     
@@ -470,10 +491,11 @@ struct InsightTimelineCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            Text(insight.type.icon)
-                .font(.title2)
-                .frame(width: 40)
+            // Kawaii insight icon
+            insightKawaiiIcon
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 36, height: 36)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(insight.type.displayTitle)
@@ -492,15 +514,23 @@ struct InsightTimelineCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(insightColor.opacity(0.15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(insightColor.opacity(0.3), lineWidth: 1)
-                )
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.lg)
+                .strokeBorder(insightColor.opacity(0.3), lineWidth: 1)
         )
         .contentShape(Rectangle())
+    }
+    
+    /// Returns the appropriate kawaii icon for the insight type
+    private var insightKawaiiIcon: Image {
+        switch insight.type {
+        case .sugarSpike, .anxietyMimic:
+            return Image("insight_spike_kawaii")
+        case .muscleSponge, .goodSpike, .zone2Drain:
+            return Image("insight_recovery_kawaii")
+        default:
+            return Image("insight_spike_kawaii")
+        }
     }
     
     private var insightColor: Color {
@@ -520,15 +550,17 @@ struct WorkoutTimelineCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
+            // Kawaii workout icon
+            Image("workout_kawaii")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 36, height: 36)
+            
             // Time
             Text(workout.startTime, format: .dateTime.hour().minute())
                 .font(.Monch.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
-            
-            // Icon
-            Text(workout.category.icon)
-                .font(.title2)
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
@@ -580,10 +612,6 @@ struct WorkoutTimelineCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.Monch.sage.opacity(0.1))
-        )
         .contentShape(Rectangle())
     }
 }
@@ -595,10 +623,11 @@ struct SleepTimelineCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            Text("😴")
-                .font(.title2)
-                .frame(width: 40)
+            // Kawaii sleep icon
+            Image("sleep_kawaii")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 36, height: 36)
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
@@ -632,10 +661,6 @@ struct SleepTimelineCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.Monch.periwinkle.opacity(0.1))
-        )
         .contentShape(Rectangle())
     }
 }
