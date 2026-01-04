@@ -166,6 +166,24 @@ struct FoodCardView: View {
             ) { option in
                 formatMultiplier(option)
             }
+            
+            // Custom Adjustment
+            HStack {
+                Text("manual adjustment")
+                    .font(.Monch.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Stepper(
+                    value: $servingMultiplier,
+                    in: 0.25...20.0,
+                    step: 0.25
+                ) {
+                    Text(formatMultiplier(servingMultiplier))
+                        .font(.Monch.headline)
+                        .monospacedDigit()
+                }
+            }
+            .padding(.top, 4)
         }
     }
     
