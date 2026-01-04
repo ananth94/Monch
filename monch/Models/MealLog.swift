@@ -54,16 +54,8 @@ final class MealLog {
     
     // MARK: - Context
     
-    /// User-applied context tags
+    /// Tags computed by ContextEngine: "refeed", "late_night", "caffeine", "high_sugar"
     var contextTags: [String] = []
-    
-    /// System-applied context tags: "refeed", "late-night", "breakfast", etc.
-    var autoTags: [String] = []
-    
-    /// All tags combined (user + system)
-    var allTags: [String] {
-        contextTags + autoTags
-    }
     
     /// The quantity or serving size multiplier (e.g., 1.0, 2.0, 0.5)
     var quantity: Double = 1.0

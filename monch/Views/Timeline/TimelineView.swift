@@ -257,20 +257,8 @@ struct MealCard: View {
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(meal.name)
-                        .font(.Monch.headline)
-                    
-                    // Auto-tags as emojis
-                    if !meal.autoTags.isEmpty {
-                        HStack(spacing: 2) {
-                            ForEach(meal.autoTags, id: \.self) { tag in
-                                Text(tagEmoji(tag))
-                                    .font(.caption2)
-                            }
-                        }
-                    }
-                }
+                Text(meal.name)
+                    .font(.Monch.headline)
                 
                 if meal.hasMacros {
                     Text(meal.macroSummary)
@@ -278,7 +266,7 @@ struct MealCard: View {
                         .foregroundStyle(.secondary)
                 }
                 
-                // User Context Tags (text pills)
+                // Context Tags
                 if !meal.contextTags.isEmpty {
                     HStack(spacing: 4) {
                         ForEach(meal.contextTags, id: \.self) { tag in
@@ -306,19 +294,6 @@ struct MealCard: View {
                 .fill(.ultraThinMaterial)
         )
         .contentShape(Rectangle())
-    }
-    
-    /// Convert tag name to emoji for compact display
-    private func tagEmoji(_ tag: String) -> String {
-        switch tag {
-        case "refeed": return "💪"
-        case "late-night": return "🌙"
-        case "breakfast": return "☀️"
-        case "lunch": return "🍽️"
-        case "dinner": return "🍴"
-        case "high-carb": return "🍞"
-        default: return "🏷️"
-        }
     }
 }
 
