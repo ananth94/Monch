@@ -76,6 +76,7 @@ final class WorkoutLog {
         id: UUID = UUID(),
         startTime: Date,
         endTime: Date,
+        duration: TimeInterval? = nil,
         activityTypeRaw: UInt,
         activityName: String,
         distanceMeters: Double? = nil,
@@ -90,7 +91,7 @@ final class WorkoutLog {
         self.id = id
         self.startTime = startTime
         self.endTime = endTime
-        self.duration = endTime.timeIntervalSince(startTime)
+        self.duration = duration ?? endTime.timeIntervalSince(startTime)
         self.activityTypeRaw = activityTypeRaw
         self.activityName = activityName
         self.distanceMeters = distanceMeters

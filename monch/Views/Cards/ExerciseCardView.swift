@@ -243,6 +243,7 @@ private struct HRZoneRow: View {
     let workout = WorkoutLog(
         startTime: Date().addingTimeInterval(-3600),
         endTime: Date().addingTimeInterval(-600),
+        duration: 45 * 60, // 45 mins active in a 50 min window
         activityTypeRaw: 37, // running
         activityName: "Morning Run",
         distanceMeters: 5200,
@@ -268,6 +269,7 @@ private struct HRZoneRow: View {
     let workout = WorkoutLog(
         startTime: Date().addingTimeInterval(-3600),
         endTime: Date().addingTimeInterval(-600),
+        duration: 40 * 60, // 40 mins active in a 50 min window
         activityTypeRaw: 50, // traditionalStrengthTraining
         activityName: "Weight Training",
         activeCalories: 280,

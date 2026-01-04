@@ -313,6 +313,7 @@ class HealthKitSyncService: ObservableObject {
             id: workout.uuid,
             startTime: workout.startDate,
             endTime: workout.endDate,
+            duration: workout.duration,
             activityTypeRaw: workout.workoutActivityType.rawValue,
             activityName: workout.workoutActivityType.displayName,
             distanceMeters: extractDistance(from: workout),
@@ -328,7 +329,7 @@ class HealthKitSyncService: ObservableObject {
     
     private func updateWorkoutLog(_ log: WorkoutLog, from workout: HKWorkout) {
         log.endTime = workout.endDate
-        log.duration = workout.endDate.timeIntervalSince(workout.startDate)
+        log.duration = workout.duration
         log.anabolicWindowEnd = workout.endDate.addingTimeInterval(2 * 60 * 60)
         log.distanceMeters = extractDistance(from: workout)
         log.activeCalories = extractActiveCalories(from: workout)
