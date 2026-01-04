@@ -15,6 +15,8 @@ actor OpenFoodFactsClient {
     
     private let baseURL = "https://world.openfoodfacts.org"
     private let session: URLSession
+    private var searchCache: [String: CachedSearch] = [:]
+    private let cacheExpiry: TimeInterval = 300 // 5 minutes
     
     private init() {
         let config = URLSessionConfiguration.default
@@ -34,6 +36,13 @@ actor OpenFoodFactsClient {
     func search(query: String, page: Int = 1, pageSize: Int = 20) async throws -> [FoodItem] {
         guard !query.isEmpty else { return [] }
         
+        let cacheKey = "\(query)_\(page)_\(pageSize)"
+        
+        // Check cache
+        if let cached = searchCache[cacheKey], !cached.isExpired(after: cacheExpiry) {
+            return cached.items
+        }
+        
         var components = URLComponents(string: "\(baseURL)/cgi/search.pl")!
         components.queryItems = [
             URLQueryItem(name: "search_terms", value: query),
@@ -49,7 +58,12 @@ actor OpenFoodFactsClient {
             throw OpenFoodFactsError.invalidURL
         }
         
-        let (data, response) = try await session.data(from: url)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(from: url)
+        } catch {
+            throw OpenFoodFactsError.networkError(error)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OpenFoodFactsError.invalidResponse
@@ -59,8 +73,13 @@ actor OpenFoodFactsClient {
             throw OpenFoodFactsError.httpError(httpResponse.statusCode)
         }
         
-        let searchResponse = try JSONDecoder().decode(SearchResponse.self, from: data)
-        return searchResponse.products.compactMap { FoodItem(from: $0) }
+        // Decode off-actor to avoid Sendable issues
+        let items = try Self.decodeSearchResponse(data)
+        
+        // Cache results
+        searchCache[cacheKey] = CachedSearch(items: items, timestamp: Date())
+        
+        return items
     }
     
     // MARK: - Barcode Lookup
@@ -71,7 +90,12 @@ actor OpenFoodFactsClient {
     func lookupBarcode(_ barcode: String) async throws -> FoodItem? {
         let url = URL(string: "\(baseURL)/api/v2/product/\(barcode).json")!
         
-        let (data, response) = try await session.data(from: url)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(from: url)
+        } catch {
+            throw OpenFoodFactsError.networkError(error)
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OpenFoodFactsError.invalidResponse
@@ -84,13 +108,39 @@ actor OpenFoodFactsClient {
             throw OpenFoodFactsError.httpError(httpResponse.statusCode)
         }
         
+        return try Self.decodeProductResponse(data)
+    }
+    
+    // MARK: - Cache Management
+    
+    func clearCache() {
+        searchCache.removeAll()
+    }
+    
+    // MARK: - Static Decoders (Sendable-safe)
+    
+    private static func decodeSearchResponse(_ data: Data) throws -> [FoodItem] {
+        let searchResponse = try JSONDecoder().decode(SearchResponse.self, from: data)
+        return searchResponse.products.compactMap { FoodItem(from: $0) }
+    }
+    
+    private static func decodeProductResponse(_ data: Data) throws -> FoodItem? {
         let productResponse = try JSONDecoder().decode(ProductResponse.self, from: data)
-        
         guard productResponse.status == 1, let product = productResponse.product else {
             return nil
         }
-        
         return FoodItem(from: product)
+    }
+}
+
+// MARK: - Cache Types
+
+private struct CachedSearch: Sendable {
+    let items: [FoodItem]
+    let timestamp: Date
+    
+    func isExpired(after seconds: TimeInterval) -> Bool {
+        Date().timeIntervalSince(timestamp) > seconds
     }
 }
 
@@ -100,6 +150,7 @@ enum OpenFoodFactsError: LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(Int)
+    case networkError(Error)
     case decodingError
     
     var errorDescription: String? {
@@ -107,14 +158,20 @@ enum OpenFoodFactsError: LocalizedError {
         case .invalidURL: return "Invalid API URL"
         case .invalidResponse: return "Invalid server response"
         case .httpError(let code): return "Server error: \(code)"
+        case .networkError(let error): return "Network error: \(error.localizedDescription)"
         case .decodingError: return "Failed to parse response"
         }
     }
+    
+    var isNetworkError: Bool {
+        if case .networkError = self { return true }
+        return false
+    }
 }
 
-// MARK: - API Response Models
+// MARK: - API Response Models (Sendable)
 
-fileprivate struct SearchResponse: Decodable, Sendable {
+private struct SearchResponse: Decodable, Sendable {
     let count: Int
     let page: Int
     let pageSize: Int
@@ -127,12 +184,12 @@ fileprivate struct SearchResponse: Decodable, Sendable {
     }
 }
 
-fileprivate struct ProductResponse: Decodable, Sendable {
+private struct ProductResponse: Decodable, Sendable {
     let status: Int
     let product: ProductDTO?
 }
 
-fileprivate struct ProductDTO: Decodable, Sendable {
+private struct ProductDTO: Decodable, Sendable {
     let code: String?
     let productName: String?
     let brands: String?
@@ -150,7 +207,7 @@ fileprivate struct ProductDTO: Decodable, Sendable {
     }
 }
 
-fileprivate struct NutrimentsDTO: Decodable, Sendable {
+private struct NutrimentsDTO: Decodable, Sendable {
     // Per 100g values
     let energyKcal100g: Double?
     let carbohydrates100g: Double?
@@ -189,7 +246,7 @@ fileprivate struct NutrimentsDTO: Decodable, Sendable {
 // MARK: - App Model
 
 /// Unified food item model used throughout the app
-struct FoodItem: Identifiable, Equatable {
+struct FoodItem: Identifiable, Equatable, Sendable {
     let id: String // Barcode or generated UUID
     let name: String
     let brand: String?

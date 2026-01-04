@@ -82,6 +82,8 @@ struct FoodSearchView: View {
             if viewModel.isSearching {
                 ProgressView("Searching...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = viewModel.error {
+                errorState(error: error)
             } else if viewModel.searchQuery.isEmpty {
                 emptySearchState
             } else if viewModel.results.isEmpty {
@@ -90,6 +92,38 @@ struct FoodSearchView: View {
                 resultsList
             }
         }
+    }
+    
+    private func errorState(error: Error) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 50))
+                .foregroundStyle(.secondary)
+            
+            Text("Connection Error")
+                .font(.Monch.headline)
+            
+            Text(error.localizedDescription)
+                .font(.Monch.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            
+            Button {
+                viewModel.retry()
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Retry")
+                }
+                .font(.Monch.headline)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(Capsule().fill(Color.Monch.sage))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     private var emptySearchState: some View {

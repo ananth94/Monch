@@ -82,6 +82,13 @@ class FoodSearchViewModel: ObservableObject {
         isSearching = false
     }
     
+    /// Retry the last search (called from error state)
+    func retry() {
+        let query = searchQuery
+        error = nil
+        debounceSearch(query: query)
+    }
+    
     // MARK: - Cart Management
     
     func addToCart(_ item: FoodItem) {
