@@ -22,9 +22,16 @@ class InsightEngine: ObservableObject {
     
     // MARK: - Dependencies
     
-    private let healthKit = HealthKitManager.shared
+    private let healthKitProvider: any HealthKitDataProvider
     
-    private init() {}
+    private init() {
+        self.healthKitProvider = HealthKitManager.shared
+    }
+    
+    /// Testing initializer with injectable provider
+    init(healthKitProvider: any HealthKitDataProvider) {
+        self.healthKitProvider = healthKitProvider
+    }
     
     // MARK: - Public API
     
@@ -107,18 +114,16 @@ class InsightEngine: ObservableObject {
             return createPredictedSugarSpike(for: meal)
         }
         
-        // Fetch HR data
+        // Fetch HR data using provider
         do {
             let baselineRange = baselineStart...mealTime
             let postMealRange = mealTime...windowEnd
             
-            let baselineHR = try await healthKit.fetchHeartRate(for: baselineRange)
-            let postMealHR = try await healthKit.fetchHeartRate(for: postMealRange)
+            let baselineHR = try await healthKitProvider.fetchHeartRateSamples(for: baselineRange)
+            let postMealHR = try await healthKitProvider.fetchHeartRateSamples(for: postMealRange)
             
             // Calculate baseline median
-            let baselineValues = baselineHR.compactMap { 
-                $0.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
-            }
+            let baselineValues = baselineHR.map(\.bpm)
             guard !baselineValues.isEmpty else { return nil }
             let baseline = baselineValues.sorted()[baselineValues.count / 2]
             
@@ -126,10 +131,9 @@ class InsightEngine: ObservableObject {
             var peak: Double = 0
             var peakTime: Date?
             for sample in postMealHR {
-                let value = sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
-                if value > peak {
-                    peak = value
-                    peakTime = sample.startDate
+                if sample.bpm > peak {
+                    peak = sample.bpm
+                    peakTime = sample.timestamp
                 }
             }
             
