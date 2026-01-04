@@ -10,6 +10,7 @@ import SwiftUI
 
 struct MascotDetailView: View {
     let mood: MascotMoodState
+    var onAction: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -113,7 +114,10 @@ struct MascotDetailView: View {
     private var quickActions: some View {
         HStack(spacing: 12) {
             if let primary = primaryAction {
-                Button(action: { /* TODO: Wire up action */ }) {
+                Button(action: { 
+                    onAction?(primary.label)
+                    dismiss()
+                }) {
                     HStack {
                         Image(systemName: primary.icon)
                         Text(primary.label)
