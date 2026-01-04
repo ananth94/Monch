@@ -60,7 +60,9 @@ struct TimelineView: View {
                 MascotDetailView(mood: currentMood)
             }
             .sheet(isPresented: $showingFoodLogger) {
-                FoodLoggerPlaceholder()
+                FoodSearchView { meal in
+                    modelContext.insert(meal)
+                }
             }
         }
     }
