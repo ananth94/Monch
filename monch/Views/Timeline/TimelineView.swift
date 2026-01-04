@@ -518,6 +518,10 @@ struct InsightTimelineCard: View {
         case .caffeineJitter: return Color.Monch.sage
         case .digestionDebt, .deepSleepRobber: return Color.Monch.periwinkle
         case .muscleSponge, .goodSpike, .zone2Drain: return Color.Monch.sage
+        // HRV-Powered insights
+        case .recoveryGap, .mealImpactScore, .alcoholImpact: return Color.Monch.coral
+        case .stressBuffer, .fastingBenefit, .morningReadiness: return Color.Monch.sage
+        case .mineralGap, .brainFogForecast: return Color.Monch.periwinkle
         }
     }
     
@@ -531,6 +535,13 @@ struct InsightTimelineCard: View {
             return Image("coffee_kawaii")
         case .digestionDebt, .deepSleepRobber:
             return Image("sleep_kawaii")
+        // HRV-Powered insights - use appropriate existing icons
+        case .recoveryGap, .mealImpactScore:
+            return Image("insight_spike_kawaii")
+        case .alcoholImpact, .brainFogForecast, .mineralGap:
+            return Image("sleep_kawaii")
+        case .stressBuffer, .fastingBenefit, .morningReadiness:
+            return Image("insight_recovery_kawaii")
         }
     }
 }

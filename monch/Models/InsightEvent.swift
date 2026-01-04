@@ -8,7 +8,8 @@
 import Foundation
 import SwiftData
 
-enum InsightType: String, Codable {
+enum InsightType: String, Codable, CaseIterable {
+    // MARK: - Existing (HR-based)
     case sugarSpike      // Acute Loop
     case anxietyMimic    // Acute Loop
     case caffeineJitter  // Acute Loop - caffeine-induced alertness
@@ -17,6 +18,50 @@ enum InsightType: String, Codable {
     case digestionDebt   // Circadian Loop
     case deepSleepRobber // Circadian Loop
     case goodSpike       // Recovery Loop
+    
+    // MARK: - New HRV-Powered (Sprint 12)
+    case recoveryGap        // Post-workout under-fueling (slow HRV recovery)
+    case stressBuffer       // Protein protected stress response (stable HRV)
+    case mineralGap         // Chronic low HRV → deficiency flag
+    case brainFogForecast   // Low morning HRV → poor focus day
+    case morningReadiness   // Daily readiness score from HRV
+    case mealImpactScore    // HRV drop quantifies meal stress
+    case alcoholImpact      // Overnight HRV suppression
+    case fastingBenefit     // HRV improvement during fast
+    
+    /// Insight display tier (controls visibility in UI)
+    var tier: InsightTier {
+        switch self {
+        case .sugarSpike, .muscleSponge, .digestionDebt, .morningReadiness:
+            return .primary
+        case .anxietyMimic, .caffeineJitter, .recoveryGap, .mealImpactScore:
+            return .secondary
+        case .stressBuffer, .fastingBenefit, .alcoholImpact, .goodSpike, .zone2Drain:
+            return .contextual
+        case .mineralGap, .brainFogForecast, .deepSleepRobber:
+            return .chronic
+        }
+    }
+    
+    /// Whether this insight is positive (celebration) vs concerning
+    var isPositive: Bool {
+        switch self {
+        case .muscleSponge, .goodSpike, .zone2Drain, .stressBuffer, .fastingBenefit:
+            return true
+        case .morningReadiness:
+            return true  // Can be negative, but handled by severity
+        default:
+            return false
+        }
+    }
+}
+
+/// Insight visibility tier for UI hierarchy
+enum InsightTier: String, Codable {
+    case primary     // Always shown, full card
+    case secondary   // Collapsed, expandable
+    case contextual  // Modal/celebration
+    case chronic     // Weekly digest only
 }
 
 @Model

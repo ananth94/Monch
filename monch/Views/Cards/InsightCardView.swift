@@ -168,6 +168,15 @@ extension InsightType {
         case .deepSleepRobber: return "Deep Sleep Robber"
         case .caffeineJitter: return "Caffeine Alert"
         case .zone2Drain: return "Glucose Sink"
+        // HRV-Powered (Sprint 12)
+        case .recoveryGap: return "Recovery Gap"
+        case .stressBuffer: return "Stress Buffer"
+        case .mineralGap: return "Mineral Check"
+        case .brainFogForecast: return "Focus Forecast"
+        case .morningReadiness: return "Morning Readiness"
+        case .mealImpactScore: return "Meal Impact"
+        case .alcoholImpact: return "Alcohol Impact"
+        case .fastingBenefit: return "Fasting Benefit"
         }
     }
     
@@ -181,6 +190,15 @@ extension InsightType {
         case .deepSleepRobber: return "😴"
         case .caffeineJitter: return "☕"
         case .zone2Drain: return "🏃"
+        // HRV-Powered (Sprint 12)
+        case .recoveryGap: return "🔋"
+        case .stressBuffer: return "🛡️"
+        case .mineralGap: return "💊"
+        case .brainFogForecast: return "🧠"
+        case .morningReadiness: return "🌅"
+        case .mealImpactScore: return "📊"
+        case .alcoholImpact: return "🍷"
+        case .fastingBenefit: return "🌿"
         }
     }
     
@@ -190,6 +208,10 @@ extension InsightType {
         case .caffeineJitter, .zone2Drain: return .recovery
         case .digestionDebt, .deepSleepRobber: return .sleep
         case .muscleSponge, .goodSpike: return .recovery
+        // HRV-Powered (Sprint 12)
+        case .recoveryGap, .mealImpactScore, .alcoholImpact: return .acute
+        case .stressBuffer, .fastingBenefit, .morningReadiness: return .recovery
+        case .mineralGap, .brainFogForecast: return .sleep
         }
     }
     
@@ -211,6 +233,23 @@ extension InsightType {
             return "Perfect time for focused work! The caffeine is doing its job."
         case .zone2Drain:
             return "You can handle more carbs tonight—your muscles are primed."
+        // HRV-Powered (Sprint 12)
+        case .recoveryGap:
+            return "Fuel up with a protein-rich meal to support HRV recovery."
+        case .stressBuffer:
+            return nil // Positive insight
+        case .mineralGap:
+            return "Consider checking your Magnesium or Zinc levels."
+        case .brainFogForecast:
+            return "Tackle important work early today before focus dips."
+        case .morningReadiness:
+            return nil // Informational
+        case .mealImpactScore:
+            return "Consider lighter meals or different food combinations."
+        case .alcoholImpact:
+            return "Give yourself an extra rest day to recover."
+        case .fastingBenefit:
+            return nil // Positive insight
         }
     }
     
@@ -250,6 +289,21 @@ extension InsightType {
             return [
                 QuickAction(label: "Log Meal", icon: "fork.knife")
             ]
+        // HRV-Powered (Sprint 12)
+        case .recoveryGap:
+            return [
+                QuickAction(label: "Log Meal", icon: "fork.knife")
+            ]
+        case .stressBuffer, .fastingBenefit, .morningReadiness:
+            return [] // Positive insights, no action needed
+        case .mineralGap:
+            return [] // Chronic insight, no immediate action
+        case .brainFogForecast:
+            return [] // Informational
+        case .mealImpactScore:
+            return [] // Informational
+        case .alcoholImpact:
+            return [] // Informational
         }
     }
 }

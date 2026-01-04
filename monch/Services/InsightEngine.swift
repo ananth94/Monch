@@ -256,6 +256,13 @@ class InsightEngine: ObservableObject {
             return .sleepy
         case .muscleSponge, .goodSpike, .zone2Drain:
             return .strong
+        // HRV-Powered insights (Sprint 12)
+        case .recoveryGap, .mealImpactScore, .alcoholImpact:
+            return .crashing
+        case .stressBuffer, .fastingBenefit, .morningReadiness:
+            return .strong
+        case .mineralGap, .brainFogForecast:
+            return .sleepy
         }
     }
     
