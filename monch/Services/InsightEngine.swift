@@ -831,6 +831,175 @@ class InsightEngine: ObservableObject {
         return nil
     }
     
+    /// Detects when protein intake protected HRV during stressful period
+    /// Algorithm: High stress day (low avg HRV) + high protein = HRV didn't crash
+    func detectStressBuffer(in modelContext: ModelContext) async -> InsightEvent? {
+        let todayStart = Calendar.current.startOfDay(for: Date())
+        let todayRange = todayStart...Date()
+        
+        do {
+            // Get today's HRV
+            let todayHRV = try await healthKitProvider.fetchHRVSamples(for: todayRange)
+            guard !todayHRV.isEmpty else { return nil }
+            
+            let avgTodayHRV = todayHRV.map(\.sdnn).reduce(0, +) / Double(todayHRV.count)
+            
+            // Get baseline
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            guard let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) else { return nil }
+            
+            // Was today "stressful" (HRV 10-20% below baseline but not crashed)?
+            let hrvRatio = avgTodayHRV / baseline
+            guard hrvRatio >= 0.8 && hrvRatio < 0.9 else { return nil }
+            
+            // Check protein intake today
+            let mealPredicate = #Predicate<MealLog> { meal in
+                meal.timestamp >= todayStart
+            }
+            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
+            let totalProtein = meals.compactMap { $0.protein }.reduce(0, +)
+            
+            // High protein (>50g) during stress = buffered
+            if totalProtein > 50 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .stressBuffer,
+                    severity: 0.2, // Positive
+                    message: "You handled today's stress well! \(Int(totalProtein))g protein kept your HRV stable.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Stress Buffer detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects chronic low HRV that may indicate mineral deficiency
+    /// Algorithm: HRV flat/low for 2+ weeks despite good sleep
+    func detectMineralGap(in modelContext: ModelContext) async -> InsightEvent? {
+        let twoWeeksAgo = Date().addingTimeInterval(-14 * 24 * 3600)
+        let range = twoWeeksAgo...Date()
+        
+        do {
+            let hrvSamples = try await healthKitProvider.fetchHRVSamples(for: range)
+            guard hrvSamples.count >= 14 else { return nil } // Need at least 2 weeks of data
+            
+            // Group by day and calculate daily averages
+            let calendar = Calendar.current
+            let grouped = Dictionary(grouping: hrvSamples) { sample in
+                calendar.startOfDay(for: sample.timestamp)
+            }
+            
+            let dailyAverages = grouped.values.map { samples in
+                samples.map(\.sdnn).reduce(0, +) / Double(samples.count)
+            }.sorted()
+            
+            guard dailyAverages.count >= 10 else { return nil }
+            
+            // Check for low variance (flat HRV)
+            let minHRV = dailyAverages.min()!
+            let maxHRV = dailyAverages.max()!
+            let variance = maxHRV - minHRV
+            
+            // Also check if consistently low (<40ms average)
+            let overallAvg = dailyAverages.reduce(0, +) / Double(dailyAverages.count)
+            
+            // Low and flat = possible mineral gap
+            if variance < 10 && overallAvg < 40 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .mineralGap,
+                    severity: 0.6,
+                    message: "Your HRV has been flat for 2 weeks (\(Int(overallAvg))ms avg). Magnesium or Zinc might help.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Mineral Gap detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Predicts brain fog based on low morning HRV
+    /// Algorithm: Morning HRV significantly below baseline = tough focus day
+    func detectBrainFogForecast() async -> InsightEvent? {
+        do {
+            guard let morningHRV = try await healthKitProvider.fetchMorningHRV(for: Date()) else { return nil }
+            
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            guard let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) else { return nil }
+            
+            let deficit = (baseline - morningHRV) / baseline
+            
+            // >25% below baseline = brain fog risk
+            if deficit > 0.25 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .brainFogForecast,
+                    severity: min(deficit, 1.0),
+                    message: "Focus might be tricky today. HRV is \(Int(deficit * 100))% below normal. Tackle hard work early.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Brain Fog Forecast failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects overnight HRV suppression from alcohol
+    /// Algorithm: Unusually low overnight HRV on nights with no late meals
+    func detectAlcoholImpact(in modelContext: ModelContext) async -> InsightEvent? {
+        // Check overnight HRV from last night
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        guard let lastNightStart = calendar.date(byAdding: .hour, value: -8, to: todayStart),
+              let lastNightEnd = calendar.date(byAdding: .hour, value: -1, to: todayStart) else { return nil }
+        
+        do {
+            let overnightHRV = try await healthKitProvider.fetchOvernightHRV(
+                sleepStart: lastNightStart,
+                sleepEnd: lastNightEnd
+            )
+            
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            guard let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange),
+                  let overnight = overnightHRV else { return nil }
+            
+            let suppression = (baseline - overnight) / baseline
+            
+            // Check if there was a late meal (could explain the dip via digestion debt)
+            let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: todayStart)!
+            let mealPredicate = #Predicate<MealLog> { meal in
+                meal.timestamp >= yesterdayStart && meal.timestamp < todayStart
+            }
+            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
+            let hasLateMeal = meals.contains { meal in
+                let hour = calendar.component(.hour, from: meal.timestamp)
+                return hour >= 20
+            }
+            
+            // >30% suppression WITHOUT late meal = likely alcohol
+            if suppression > 0.3 && !hasLateMeal {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .alcoholImpact,
+                    severity: min(suppression, 1.0),
+                    message: "Last night's drinks took a toll. Overnight HRV was \(Int(suppression * 100))% below normal.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Alcohol Impact detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
     // MARK: - Integration: Scheduled Checks
     
     /// Run morning insight checks (call from app launch)
@@ -843,10 +1012,28 @@ class InsightEngine: ObservableObject {
             modelContext.insert(readiness)
         }
         
+        // Brain Fog Forecast (if HRV is significantly below baseline)
+        if let brainFog = await detectBrainFogForecast() {
+            insights.append(brainFog)
+            modelContext.insert(brainFog)
+        }
+        
+        // Alcohol Impact (if overnight HRV was suppressed)
+        if let alcohol = await detectAlcoholImpact(in: modelContext) {
+            insights.append(alcohol)
+            modelContext.insert(alcohol)
+        }
+        
         // Fasting Benefit (if applicable)
         if let fasting = await detectFastingBenefit(in: modelContext) {
             insights.append(fasting)
             modelContext.insert(fasting)
+        }
+        
+        // Stress Buffer (end of day check - can also run in evening)
+        if let stress = await detectStressBuffer(in: modelContext) {
+            insights.append(stress)
+            modelContext.insert(stress)
         }
         
         return insights
@@ -859,6 +1046,11 @@ class InsightEngine: ObservableObject {
         if let deepSleepRobber = await detectDeepSleepRobber(in: modelContext) {
             insights.append(deepSleepRobber)
             modelContext.insert(deepSleepRobber)
+        }
+        
+        if let mineralGap = await detectMineralGap(in: modelContext) {
+            insights.append(mineralGap)
+            modelContext.insert(mineralGap)
         }
         
         return insights
