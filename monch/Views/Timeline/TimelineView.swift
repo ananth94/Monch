@@ -14,16 +14,16 @@ struct TimelineView: View {
     @Query(sort: \MealLog.timestamp, order: .reverse) private var meals: [MealLog]
     @Query(sort: \InsightEvent.timestamp, order: .reverse) private var insights: [InsightEvent]
     @ObservedObject private var healthKit = HealthKitManager.shared
+    @ObservedObject private var insightEngine = InsightEngine.shared
     
     @State private var showingMascotDetail = false
     @State private var showingFoodLogger = false
-    @State private var currentMood: MascotMoodState = .neutral
     
     var body: some View {
         NavigationStack {
             ZStack {
                 // Background
-                MeshGradientBackground(mood: currentMood.gradientMood)
+                MeshGradientBackground(mood: insightEngine.currentMood.gradientMood)
                     .opacity(0.3)
                 
                 VStack(spacing: 0) {
@@ -33,7 +33,7 @@ struct TimelineView: View {
                     }
                     
                     // Mascot Header - tappable to expand
-                    MascotHeader(mood: currentMood) {
+                    MascotHeader(mood: insightEngine.currentMood) {
                         showingMascotDetail = true
                     }
                     .padding(.horizontal)
@@ -63,12 +63,22 @@ struct TimelineView: View {
                 }
             }
             .sheet(isPresented: $showingMascotDetail) {
-                MascotDetailView(mood: currentMood)
+                MascotDetailView(mood: insightEngine.currentMood)
             }
             .sheet(isPresented: $showingFoodLogger) {
                 FoodSearchView { meal in
                     modelContext.insert(meal)
+                    // Trigger insight analysis
+                    Task {
+                        await insightEngine.analyzeMeal(meal, in: modelContext)
+                    }
                 }
+            }
+            .onAppear {
+                insightEngine.refreshMood(meals: meals, insights: insights)
+            }
+            .onChange(of: meals.count) { _, _ in
+                insightEngine.refreshMood(meals: meals, insights: insights)
             }
         }
     }
