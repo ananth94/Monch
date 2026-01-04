@@ -324,7 +324,7 @@ class DashboardDataService: ObservableObject {
             streaks.append(Streak(
                 type: .kitchenClosed,
                 count: kitchenClosedCount,
-                personalBest: max(kitchenClosedCount, 14), // Placeholder PB
+                personalBest: calculatePersonalBest(meals: meals, insights: insights, type: .kitchenClosed),
                 isAtRisk: isAtRisk
             ))
         }
@@ -351,7 +351,7 @@ class DashboardDataService: ObservableObject {
             streaks.append(Streak(
                 type: .noSpikes,
                 count: noSpikeCount,
-                personalBest: max(noSpikeCount, 7),
+                personalBest: calculatePersonalBest(meals: meals, insights: insights, type: .noSpikes),
                 isAtRisk: false
             ))
         }
@@ -369,6 +369,53 @@ class DashboardDataService: ObservableObject {
         default:
             return false
         }
+    }
+    
+    // MARK: - Internal Helpers
+    
+    /// Calculate the historical record for a specific streak type
+    private func calculatePersonalBest(meals: [MealLog], insights: [InsightEvent], type: StreakType) -> Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        // Find the earliest data point to know how far back to look
+        let earliestMeal = meals.map { $0.timestamp }.min() ?? today
+        let earliestInsight = insights.map { $0.timestamp }.min() ?? today
+        let startDate = calendar.startOfDay(for: min(earliestMeal, earliestInsight))
+        
+        var maxStreak = 0
+        var currentStreak = 0
+        
+        var currentDay = startDate
+        while currentDay <= today {
+            let dayMeals = meals.filter { calendar.isDate($0.timestamp, inSameDayAs: currentDay) }
+            
+            var dayQualified = false
+            if !dayMeals.isEmpty {
+                switch type {
+                case .kitchenClosed:
+                    let lateMeal = dayMeals.first { calendar.component(.hour, from: $0.timestamp) >= 21 }
+                    dayQualified = (lateMeal == nil)
+                case .noSpikes:
+                    let daySpikes = insights.filter { calendar.isDate($0.timestamp, inSameDayAs: currentDay) && $0.type == .sugarSpike }
+                    dayQualified = daySpikes.isEmpty
+                default:
+                    dayQualified = false
+                }
+            }
+            
+            if dayQualified {
+                currentStreak += 1
+                maxStreak = max(maxStreak, currentStreak)
+            } else if !dayMeals.isEmpty {
+                currentStreak = 0
+            }
+            
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDay) else { break }
+            currentDay = nextDay
+        }
+        
+        return maxStreak
     }
 }
 

@@ -51,7 +51,9 @@ struct DashboardView: View {
                         TodayView(summary: todaySummary)
                             .tag(DashboardTab.today)
                         
-                        WeekView()
+                        WeekView(onSeeEntries: {
+                            onNavigateToDate?(Date())
+                        })
                             .tag(DashboardTab.week)
                         
                         MonthView(onNavigateToDate: onNavigateToDate)

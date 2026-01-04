@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PatternCard: View {
     let pattern: Pattern
+    var onSeeEntries: (() -> Void)?
     
     @State private var isExpanded = false
     
@@ -66,7 +67,7 @@ struct PatternCard: View {
                     // Drill-down link
                     if !pattern.linkedEntryIDs.isEmpty {
                         Button {
-                            // TODO: Navigate to linked entries
+                            onSeeEntries?()
                         } label: {
                             HStack {
                                 Text("See linked meals")

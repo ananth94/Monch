@@ -13,6 +13,15 @@ struct WeeklyBarChart: View {
     @State private var appeared = false
     @State private var selectedDay: DailySummary?
     
+    private var dataHash: Int {
+        var hasher = Hasher()
+        for day in dailyData {
+            hasher.combine(day.calories)
+            hasher.combine(day.date)
+        }
+        return hasher.finalize()
+    }
+    
     private let maxCalories: Double = 2500 // Reference for bar height
     
     var body: some View {
@@ -52,7 +61,10 @@ struct WeeklyBarChart: View {
             RoundedRectangle(cornerRadius: CornerRadius.lg)
                 .fill(.ultraThinMaterial)
         )
-        .onAppear {
+        .task(id: dataHash) {
+            // Only reset animation if data actually changes
+            appeared = false
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s delay
             withAnimation(.spring(duration: 0.8)) {
                 appeared = true
             }

@@ -18,6 +18,8 @@ struct WeekView: View {
     @ObservedObject private var dataService = DashboardDataService.shared
     @ObservedObject private var insightEngine = InsightEngine.shared
     
+    var onSeeEntries: (() -> Void)?
+    
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
@@ -127,7 +129,7 @@ struct WeekView: View {
                 .padding(.horizontal)
             
             ForEach(weeklySummary.patterns) { pattern in
-                PatternCard(pattern: pattern)
+                PatternCard(pattern: pattern, onSeeEntries: onSeeEntries)
                     .padding(.horizontal)
             }
         }
