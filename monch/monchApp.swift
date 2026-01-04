@@ -35,6 +35,13 @@ struct monchApp: App {
                         // Request HealthKit authorization
                         await HealthKitManager.shared.requestAuthorization()
                         
+                        // Request notification authorization
+                        let notificationGranted = await NotificationManager.shared.requestAuthorization()
+                        if notificationGranted {
+                            // Schedule daily Kitchen Closing nudge at 8:30 PM
+                            NotificationManager.shared.scheduleKitchenClosingNudge()
+                        }
+                        
                         // Sync health data to local storage for ambient insights
                         let context = sharedModelContainer.mainContext
                         await HealthKitSyncService.shared.syncAll(modelContext: context)

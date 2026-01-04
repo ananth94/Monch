@@ -70,6 +70,9 @@ final class WorkoutLog {
     /// HealthKit source bundle identifier
     var sourceBundleId: String?
     
+    /// Whether this workout was manually entered (vs synced from HealthKit)
+    var isManualEntry: Bool
+    
     // MARK: - Initialization
     
     init(
@@ -85,7 +88,8 @@ final class WorkoutLog {
         avgHeartRate: Double? = nil,
         maxHeartRate: Double? = nil,
         dominantHRZone: Int? = nil,
-        sourceBundleId: String? = nil
+        sourceBundleId: String? = nil,
+        isManualEntry: Bool = false
     ) {
         precondition(endTime >= startTime, "Workout end time must be after or equal to start time")
         self.id = id
@@ -103,6 +107,7 @@ final class WorkoutLog {
         self.anabolicWindowEnd = endTime.addingTimeInterval(2 * 60 * 60) // +2 hours
         self.healthKitSyncDate = Date()
         self.sourceBundleId = sourceBundleId
+        self.isManualEntry = isManualEntry
     }
 }
 
