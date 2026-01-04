@@ -95,6 +95,104 @@ class HealthKitSyncService: ObservableObject {
         lastSleepSyncDate = now
     }
     
+    /// Sync only workout data (last 7 days)
+    func syncWorkoutData(modelContext: ModelContext) async throws {
+        let calendar = Calendar.current
+        let now = Date()
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+        
+        let workouts = try await fetchWorkouts(from: sevenDaysAgo, to: now)
+        
+        for workout in workouts {
+            await upsertWorkoutLog(workout, modelContext: modelContext)
+        }
+        
+        lastWorkoutSyncDate = now
+    }
+    
+    // MARK: - HealthKit Fetching
+    
+    private func fetchSleepSamples(from startDate: Date, to endDate: Date) async throws -> [HKCategorySample] {
+        let sleepType = HKCategoryType(.sleepAnalysis)
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: sleepType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
+            ) { _, samples, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: samples as? [HKCategorySample] ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+    
+    private func fetchWorkouts(from startDate: Date, to endDate: Date) async throws -> [HKWorkout] {
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate)
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: HKWorkoutType.workoutType(),
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]
+            ) { _, samples, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: samples as? [HKWorkout] ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+    
+    // MARK: - Sleep Processing
+    
+    /// Group individual sleep samples into coherent sleep sessions
+    private func groupSleepSamplesIntoSessions(_ samples: [HKCategorySample]) -> [SleepSession] {
+        guard !samples.isEmpty else { return [] }
+        
+        // Group samples by night (samples ending before noon belong to previous night)
+        var sessionsByNight: [Date: [HKCategorySample]] = [:]
+        let calendar = Calendar.current
+        
+        for sample in samples {
+            // Use the END time (wake time) to determine which night this belongs to
+            // If you wake up before noon, it's part of the previous night's sleep
+            let wakeHour = calendar.component(.hour, from: sample.endDate)
+            var sessionDate = calendar.startOfDay(for: sample.endDate)
+            
+            // If waking up before noon, attribute to previous night
+            if wakeHour < 12 {
+                sessionDate = calendar.date(byAdding: .day, value: -1, to: sessionDate) ?? sessionDate
+            }
+            
+            sessionsByNight[sessionDate, default: []].append(sample)
+        }
+        
+        // Convert grouped samples into sessions
+        return sessionsByNight.compactMap { (nightDate, nightSamples) -> SleepSession? in
+            guard let earliest = nightSamples.min(by: { $0.startDate < $1.startDate }),
+                  let latest = nightSamples.max(by: { $0.endDate < $1.endDate }) else {
+                return nil
+            }
+            
+            return SleepSession(
+                nightDate: nightDate,
+                startTime: earliest.startDate,
+                endTime: latest.endDate,
+                samples: nightSamples
+            )
+        }.sorted { $0.startTime > $1.startTime }
+    }
+    
     private func createSleepLog(from session: SleepSession) -> SleepLog {
         let breakdown = calculateSleepStageBreakdown(session.samples)
         let segments = createSleepSegments(from: session.samples)
