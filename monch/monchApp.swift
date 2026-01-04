@@ -16,7 +16,8 @@ struct monchApp: App {
             InsightEvent.self,
             MascotStateLog.self,
             SleepLog.self,
-            WorkoutLog.self
+            WorkoutLog.self,
+            VibeCheck.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

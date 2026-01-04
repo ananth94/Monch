@@ -24,6 +24,7 @@ struct TimelineView: View {
     @State private var showingSleepLogger = false
     @State private var showingCaffeineLogger = false
     @State private var showingSupplementLogger = false
+    @State private var showingVibeCheck = false
     @State private var selectedMeal: MealLog?
     @State private var selectedInsight: InsightEvent?
     @State private var selectedWorkout: WorkoutLog?
@@ -105,6 +106,14 @@ struct TimelineView: View {
                         } label: {
                             Label("Log Sleep", systemImage: "moon.zzz")
                         }
+                        
+                        Divider()
+                        
+                        Button {
+                            showingVibeCheck = true
+                        } label: {
+                            Label("Vibe Check", systemImage: "face.smiling")
+                        }
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
@@ -151,6 +160,9 @@ struct TimelineView: View {
                         await insightEngine.analyzeMeal(meal, in: modelContext)
                     }
                 }
+            }
+            .sheet(isPresented: $showingVibeCheck) {
+                VibeCheckView()
             }
             .onAppear {
                 insightEngine.refreshMood(meals: meals, insights: insights)
