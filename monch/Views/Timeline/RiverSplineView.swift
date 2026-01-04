@@ -243,10 +243,10 @@ struct RiverSplineView: View {
         var rightEdge: [CGPoint] = []
         
         for (index, point) in centerPoints.enumerated() {
-            // Variable width: wider in middle of screen (40-80pt range)
+            // Variable width: wider in middle of screen (60-120pt range for visibility)
             let normalizedY = point.y / size.height
             let widthFactor = 0.5 + 0.5 * sin(normalizedY * .pi) // 0.5 to 1.0
-            let baseWidth: CGFloat = 40 + 40 * widthFactor // 40 to 80
+            let baseWidth: CGFloat = 60 + 60 * widthFactor // 60 to 120
             let width = baseWidth * widthMultiplier
             
             // Calculate perpendicular direction
@@ -312,38 +312,38 @@ struct RiverSplineView: View {
         case .neutral, .digesting:
             // Base gradient (Sage → Periwinkle)
             return Gradient(colors: [
-                Color.Monch.sage.opacity(0.3),
-                Color.Monch.periwinkle.opacity(0.3)
+                Color.Monch.sage.opacity(0.6),
+                Color.Monch.periwinkle.opacity(0.6)
             ])
         case .spiking:
             // Warmer tint (+15% Coral overlay)
             return Gradient(colors: [
-                Color.Monch.sage.opacity(0.25),
-                Color.Monch.coral.opacity(0.2),
-                Color.Monch.periwinkle.opacity(0.25)
+                Color.Monch.sage.opacity(0.5),
+                Color.Monch.coral.opacity(0.45),
+                Color.Monch.periwinkle.opacity(0.5)
             ])
         case .crashing:
             // Cooler tint (+10% Lavender)
             return Gradient(colors: [
-                Color.Monch.lavender.opacity(0.3),
-                Color.Monch.periwinkle.opacity(0.35)
+                Color.Monch.lavender.opacity(0.6),
+                Color.Monch.periwinkle.opacity(0.65)
             ])
         case .strong:
             // Brighter saturation (+10%)
             return Gradient(colors: [
-                Color.Monch.sage.opacity(0.4),
-                Color.Monch.periwinkle.opacity(0.35)
+                Color.Monch.sage.opacity(0.7),
+                Color.Monch.periwinkle.opacity(0.65)
             ])
         case .sleepy:
             // Deeper Periwinkle, less Sage
             return Gradient(colors: [
-                Color.Monch.periwinkle.opacity(0.35),
-                Color.Monch.lavender.opacity(0.3)
+                Color.Monch.periwinkle.opacity(0.65),
+                Color.Monch.lavender.opacity(0.6)
             ])
         case .hungry:
             return Gradient(colors: [
-                Color.Monch.cream.opacity(0.25),
-                Color.Monch.sage.opacity(0.25)
+                Color.Monch.cream.opacity(0.5),
+                Color.Monch.sage.opacity(0.5)
             ])
         }
     }
