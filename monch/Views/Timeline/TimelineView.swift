@@ -69,7 +69,9 @@ struct TimelineView: View {
                 }
             }
             .sheet(isPresented: $showingMascotDetail) {
-                MascotDetailView(mood: insightEngine.currentMood)
+                MascotDetailView(mood: insightEngine.currentMood) { action in
+                    handleMascotAction(action)
+                }
             }
             .sheet(isPresented: $showingFoodLogger) {
                 FoodSearchView { meal in
@@ -101,6 +103,23 @@ struct TimelineView: View {
             .sheet(item: $selectedSleep) { sleep in
                 SleepCardView(sleepLog: sleep)
             }
+        }
+    }
+    
+    // MARK: - Mascot Actions
+    
+    private func handleMascotAction(_ action: String) {
+        switch action {
+        case "Log Meal", "Log Protein", "Quick Snack":
+            showingFoodLogger = true
+        case "Add Walk":
+            // TODO: Deep link to workout/activity flow
+            break
+        case "Close Kitchen":
+            // TODO: Log a 'Last Call' event or start fasting timer
+            break
+        default:
+            break
         }
     }
     
