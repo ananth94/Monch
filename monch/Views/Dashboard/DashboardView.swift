@@ -51,10 +51,10 @@ struct DashboardView: View {
                         TodayView(summary: todaySummary)
                             .tag(DashboardTab.today)
                         
-                        WeekViewPlaceholder()
+                        WeekView()
                             .tag(DashboardTab.week)
                         
-                        MonthViewPlaceholder()
+                        MonthView(onNavigateToDate: onNavigateToDate)
                             .tag(DashboardTab.month)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
@@ -78,45 +78,10 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Placeholder Views (for PR #1)
-
-struct WeekViewPlaceholder: View {
-    var body: some View {
-        ScrollView {
-            VStack(spacing: Spacing.lg) {
-                MascotHeader(mood: .neutral) { }
-                    .padding(.horizontal)
-                
-                ContentUnavailableView(
-                    "Week View",
-                    systemImage: "chart.bar",
-                    description: Text("Coming in PR #2")
-                )
-            }
-        }
-    }
-}
-
-struct MonthViewPlaceholder: View {
-    var body: some View {
-        ScrollView {
-            VStack(spacing: Spacing.lg) {
-                MascotHeader(mood: .neutral) { }
-                    .padding(.horizontal)
-                
-                ContentUnavailableView(
-                    "Month View",
-                    systemImage: "calendar",
-                    description: Text("Coming in PR #2")
-                )
-            }
-        }
-    }
-}
-
 // MARK: - Preview
 
 #Preview {
     DashboardView()
         .modelContainer(for: [MealLog.self, InsightEvent.self, WorkoutLog.self, SleepLog.self], inMemory: true)
 }
+
