@@ -206,15 +206,16 @@ class InsightEngine: ObservableObject {
     /// Algorithm from Insights_Library.md:
     /// - Trigger: meal_time > (sleep_start - 3h)
     /// - Logic: nocturnal_dip < 10%
+    /// 
+    /// Sprint 12 Enhancement: Uses HRV confirmation when analyzing post-sleep
     private func detectDigestionDebt(for meal: MealLog) async -> InsightEvent? {
         let mealHour = Calendar.current.component(.hour, from: meal.timestamp)
         
         // Simple heuristic: meals after 8 PM are "late"
-        // In future, use actual sleep schedule from HealthKit
         guard mealHour >= 20 else { return nil }
         
-        // Calculate severity based on how late
-        let severity: Double
+        // Calculate base severity based on how late
+        var severity: Double
         if mealHour >= 22 {
             severity = 0.9
         } else if mealHour >= 21 {
@@ -223,15 +224,69 @@ class InsightEngine: ObservableObject {
             severity = 0.3
         }
         
+        var message: String
         let hourString = mealHour >= 22 ? "very late" : "late"
+        
+        // Sprint 12: Try to get HRV confirmation if we're analyzing past meals
+        // (i.e., a night has passed since the meal)
+        let hoursSinceMeal = Date().timeIntervalSince(meal.timestamp) / 3600
+        if hoursSinceMeal > 8 {
+            // We can check overnight HRV to confirm the debt
+            if let hrvConfirmation = await checkOvernightHRVDip(after: meal.timestamp) {
+                if hrvConfirmation.dipPercentage < 0.10 {
+                    // HRV confirms poor recovery
+                    severity = min(severity + 0.2, 1.0)
+                    message = "That \(hourString) dinner suppressed overnight HRV by only \(Int(hrvConfirmation.dipPercentage * 100))%. Recovery was impacted."
+                } else {
+                    // HRV shows normal recovery - reduce severity
+                    severity = max(severity - 0.2, 0.1)
+                    message = "Late dinner, but your HRV recovered well. Consider this a gentle reminder."
+                }
+            } else {
+                message = "Eating this \(hourString) may keep your heart working while you sleep, reducing recovery."
+            }
+        } else {
+            // Real-time prediction (before sleep)
+            message = "Eating this \(hourString) may keep your heart working while you sleep, reducing recovery."
+        }
         
         return InsightEvent(
             timestamp: meal.timestamp,
             type: .digestionDebt,
             severity: severity,
-            message: "Eating this \(hourString) may keep your heart working while you sleep, reducing recovery.",
+            message: message,
             associatedMealID: meal.id
         )
+    }
+    
+    /// Check overnight HRV dip (should be >10% for good recovery)
+    private func checkOvernightHRVDip(after mealTime: Date) async -> (dipPercentage: Double, overnightHRV: Double)? {
+        // Find the sleep window after this meal
+        let assumedSleepStart = Calendar.current.date(byAdding: .hour, value: 3, to: mealTime)!
+        let assumedSleepEnd = Calendar.current.date(byAdding: .hour, value: 10, to: mealTime)!
+        
+        do {
+            // Get overnight HRV
+            let overnightHRV = try await healthKitProvider.fetchOvernightHRV(
+                sleepStart: assumedSleepStart,
+                sleepEnd: assumedSleepEnd
+            )
+            
+            // Get 7-day baseline
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange)
+            
+            guard let overnight = overnightHRV, let base = baseline, base > 0 else { return nil }
+            
+            // Calculate dip (overnight should be similar or higher than baseline during rest)
+            // A "dip" here means overnight is LOWER than baseline (bad sign)
+            let dip = (base - overnight) / base
+            
+            return (dipPercentage: max(0, dip), overnightHRV: overnight)
+        } catch {
+            print("InsightEngine: Failed to check overnight HRV dip: \(error)")
+            return nil
+        }
     }
     
     // MARK: - Mood Mapping
