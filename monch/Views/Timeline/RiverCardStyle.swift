@@ -104,22 +104,24 @@ struct RiverCardStyleModifier: ViewModifier {
             // Alternating position and rotation
             .offset(x: horizontalOffset)
             .rotationEffect(rotation)
-            // Ripple effect overlay
-            .riverRipple()
+            // Note: Ripple effect removed - was breaking tap gestures
     }
     
     private var cardBackgroundColor: Color {
         switch cardType {
         case .meal:
-            return Color.Monch.cream.opacity(0.95)
+            // Solid cream for dark text readability
+            return Color.Monch.cream
         case .insight:
-            return Color.white.opacity(0.9)
+            return Color.white
         case .workout:
-            return Color.Monch.sage.opacity(0.1)
+            // Light sage tint
+            return Color(red: 0.92, green: 0.96, blue: 0.93)
         case .sleep:
-            return Color.Monch.periwinkle.opacity(0.1)
+            // Light periwinkle tint
+            return Color(red: 0.93, green: 0.93, blue: 0.98)
         case .vibe:
-            return Color.Monch.periwinkle.opacity(0.08)
+            return Color.white.opacity(0.95)
         }
     }
 }

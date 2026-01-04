@@ -240,15 +240,6 @@ struct TimelineView: View {
     private var timelineList: some View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                // Scroll position tracker
-                GeometryReader { geo in
-                    Color.clear.preference(
-                        key: ScrollOffsetPreferenceKey.self,
-                        value: geo.frame(in: .named("scroll")).minY
-                    )
-                }
-                .frame(height: 0)
-                
                 ForEach(groupedByDay, id: \.key) { day, items in
                     Section {
                         ForEach(Array(items.sorted(by: { $0.timestamp > $1.timestamp }).enumerated()), id: \.element.id) { index, item in
@@ -272,10 +263,6 @@ struct TimelineView: View {
                 }
             }
             .padding(.bottom, 100) // Space for tab bar
-        }
-        .coordinateSpace(name: "scroll")
-        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-            scrollOffset = value
         }
     }
     
