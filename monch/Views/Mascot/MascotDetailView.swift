@@ -11,6 +11,11 @@ import SwiftUI
 struct MascotDetailView: View {
     let mood: MascotMoodState
     var onAction: ((String) -> Void)? = nil
+    
+    // Real data props
+    var lastMealTimestamp: Date? = nil
+    var hrDelta: Int? = nil
+    
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -65,6 +70,11 @@ struct MascotDetailView: View {
             }
         }
         .presentationDragIndicator(.visible)
+        .onAppear {
+            // Haptic feedback on open
+            let generator = UIImpactFeedbackGenerator(style: .soft)
+            generator.impactOccurred()
+        }
     }
     
     // MARK: - Coaching Text
@@ -97,8 +107,10 @@ struct MascotDetailView: View {
                 .foregroundStyle(.secondary)
             
             HStack(spacing: 16) {
-                DataPill(label: "Last meal", value: "45 min ago")
-                DataPill(label: "HR", value: "+12 bpm")
+                DataPill(label: "Last meal", value: lastMealText)
+                if let delta = hrDelta {
+                    DataPill(label: "HR", value: delta >= 0 ? "+\(delta) bpm" : "\(delta) bpm")
+                }
             }
         }
         .padding()
@@ -107,6 +119,19 @@ struct MascotDetailView: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
         )
+    }
+    
+    private var lastMealText: String {
+        guard let timestamp = lastMealTimestamp else {
+            return "No meals today"
+        }
+        let minutes = Int(Date().timeIntervalSince(timestamp) / 60)
+        if minutes < 60 {
+            return "\(minutes) min ago"
+        } else {
+            let hours = minutes / 60
+            return "\(hours)h ago"
+        }
     }
     
     // MARK: - Quick Actions
