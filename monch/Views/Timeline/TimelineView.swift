@@ -88,8 +88,19 @@ struct TimelineView: View {
             }
             .sheet(item: $selectedMeal) { meal in
                 FoodCardView(meal: meal) {
+                    let mealID = meal.id
                     modelContext.delete(meal)
+                    
+                    // Cleanup associated insights
+                    let predicate = #Predicate<InsightEvent> { insight in
+                        insight.associatedMealID == mealID
+                    }
+                    try? modelContext.delete(model: InsightEvent.self, where: predicate)
+                    
                     selectedMeal = nil
+                    
+                    // Refresh mascot mood immediately
+                    insightEngine.refreshMood(meals: meals, insights: insights)
                 }
             }
             .sheet(item: $selectedInsight) { insight in
