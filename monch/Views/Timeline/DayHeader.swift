@@ -64,7 +64,7 @@ struct DayHeader: View {
             // Sand texture overlay
             Image("sand_texture")
                 .resizable(resizingMode: .tile)
-                .opacity(0.03)
+                .opacity(0.15)
                 .clipShape(Capsule())
             
             // Subtle border

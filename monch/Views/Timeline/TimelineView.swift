@@ -426,6 +426,7 @@ struct MealCard: View {
                 HStack(spacing: 6) {
                     Text(meal.name)
                         .font(.Monch.headline)
+                        .foregroundStyle(.primary)  // Ensure dark text
                     
                     // Auto-tags as emojis
                     if !meal.autoTags.isEmpty {
@@ -702,13 +703,8 @@ struct VibeTimelineCard: View {
                 }
             }
             
-            Spacer()
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.Monch.periwinkle.opacity(0.1))
-        )
         .contentShape(Rectangle())
     }
 }
