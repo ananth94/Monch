@@ -390,6 +390,13 @@ struct MealCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
+            // Kawaii meal icon
+            Image("meal_kawaii")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .accessibilityLabel("Meal")
+            
             // Time
             Text(meal.timestamp, format: .dateTime.hour().minute())
                 .font(.Monch.caption)
@@ -470,10 +477,12 @@ struct InsightTimelineCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            Text(insight.type.icon)
-                .font(.title2)
-                .frame(width: 40)
+            // Kawaii insight icon based on type
+            insightKawaiiIcon
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .accessibilityLabel(insight.type.displayTitle)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(insight.type.displayTitle)
@@ -506,9 +515,22 @@ struct InsightTimelineCard: View {
     private var insightColor: Color {
         switch insight.type {
         case .sugarSpike, .anxietyMimic: return Color.Monch.coral
-        case .caffeineJitter: return Color.Monch.sage // Positive/alert state
+        case .caffeineJitter: return Color.Monch.sage
         case .digestionDebt, .deepSleepRobber: return Color.Monch.periwinkle
         case .muscleSponge, .goodSpike, .zone2Drain: return Color.Monch.sage
+        }
+    }
+    
+    private var insightKawaiiIcon: Image {
+        switch insight.type {
+        case .sugarSpike, .anxietyMimic:
+            return Image("insight_spike_kawaii")
+        case .muscleSponge, .goodSpike, .zone2Drain:
+            return Image("insight_recovery_kawaii")
+        case .caffeineJitter:
+            return Image("coffee_kawaii")
+        case .digestionDebt, .deepSleepRobber:
+            return Image("sleep_kawaii")
         }
     }
 }
@@ -520,15 +542,18 @@ struct WorkoutTimelineCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
+            // Kawaii workout icon
+            Image("workout_kawaii")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .accessibilityLabel("Workout")
+            
             // Time
             Text(workout.startTime, format: .dateTime.hour().minute())
                 .font(.Monch.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
-            
-            // Icon
-            Text(workout.category.icon)
-                .font(.title2)
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
@@ -595,10 +620,12 @@ struct SleepTimelineCard: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Icon
-            Text("😴")
-                .font(.title2)
-                .frame(width: 40)
+            // Kawaii sleep icon
+            Image("sleep_kawaii")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .accessibilityLabel("Sleep")
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
