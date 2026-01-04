@@ -228,20 +228,11 @@ private struct SleepStageRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 35, alignment: .trailing)
             
-            Text(formatMinutes(minutes))
+            Text(minutes.formattedAsMinutes)
                 .font(.Monch.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 55, alignment: .trailing)
         }
-    }
-    
-    private func formatMinutes(_ minutes: Int) -> String {
-        let hours = minutes / 60
-        let mins = minutes % 60
-        if hours > 0 {
-            return "\(hours)h \(mins)m"
-        }
-        return "\(mins)m"
     }
 }
 

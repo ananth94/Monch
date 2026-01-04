@@ -483,7 +483,7 @@ private struct SleepStagePill: View {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
-            Text("\(label) \(formatMinutes(minutes))")
+            Text("\(label) \(minutes.formattedAsMinutes)")
                 .font(.Monch.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -491,15 +491,6 @@ private struct SleepStagePill: View {
         .padding(.vertical, 2)
         .background(color.opacity(0.1))
         .clipShape(Capsule())
-    }
-    
-    private func formatMinutes(_ minutes: Int) -> String {
-        let hours = minutes / 60
-        let mins = minutes % 60
-        if hours > 0 {
-            return "\(hours)h \(mins)m"
-        }
-        return "\(mins)m"
     }
 }
 
@@ -530,5 +521,5 @@ struct FoodLoggerPlaceholder: View {
 
 #Preview {
     TimelineView()
-        .modelContainer(for: [MealLog.self, InsightEvent.self], inMemory: true)
+        .modelContainer(for: [MealLog.self, InsightEvent.self, WorkoutLog.self, SleepLog.self], inMemory: true)
 }

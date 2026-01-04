@@ -237,15 +237,7 @@ struct FoodCardView: View {
     // MARK: - Actions
     
     private func saveChanges() {
-        // Update meal with new serving size
-        if let cal = meal.calories { meal.calories = cal * servingMultiplier }
-        if let carbs = meal.carbs { meal.carbs = carbs * servingMultiplier }
-        if let protein = meal.protein { meal.protein = protein * servingMultiplier }
-        if let fat = meal.fat { meal.fat = fat * servingMultiplier }
-        if let fiber = meal.fiber { meal.fiber = fiber * servingMultiplier }
-        if let sugar = meal.sugar { meal.sugar = sugar * servingMultiplier }
-        if let caffeine = meal.caffeine { meal.caffeine = caffeine * servingMultiplier }
-        
+        meal.scaleServingSize(by: servingMultiplier)
         dismiss()
     }
 }

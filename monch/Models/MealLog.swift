@@ -91,6 +91,22 @@ final class MealLog {
         self.iron = iron
         self.contextTags = tags
     }
+    
+    /// Scales all nutritional values by the given multiplier
+    /// - Parameter multiplier: The serving size multiplier (e.g., 0.5, 1.5, 2.0)
+    func scaleServingSize(by multiplier: Double) {
+        if let cal = calories { calories = cal * multiplier }
+        if let c = carbs { carbs = c * multiplier }
+        if let p = protein { protein = p * multiplier }
+        if let f = fat { fat = f * multiplier }
+        if let fb = fiber { fiber = fb * multiplier }
+        if let s = sugar { sugar = s * multiplier }
+        if let cf = caffeine { caffeine = cf * multiplier }
+        if let mg = magnesium { magnesium = mg * multiplier }
+        if let zn = zinc { zinc = zn * multiplier }
+        if let na = sodium { sodium = na * multiplier }
+        if let fe = iron { iron = fe * multiplier }
+    }
 }
 
 // MARK: - Computed Properties

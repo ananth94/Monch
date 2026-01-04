@@ -1,45 +1,99 @@
-# Implementation Plan: Monch View & Animations
+# Sprint 5: Timeline Cards Shell + FoodCard
 
-Implement the core mascot experience components as defined in [Mascot_UX.md](file:///Users/ananthradhakrishnan/Documents/Projects/Monch/Mascot_UX.md).
+## Goal
+Build reusable card detail shell and implement FoodCard for editing/viewing logged meals.
+
+---
 
 ## Proposed Changes
 
-### [Mascot Components]
+### 1. Shared Card Shell
+#### [NEW] `monch/Views/Cards/CardDetailShell.swift`
+Reusable container for all card types per `Timeline_Cards_UX.md`:
 
-#### [NEW] [MonchAvatar.swift](file:///Users/ananthradhakrishnan/Documents/Projects/Monch/monch/Views/Mascot/MonchAvatar.swift)
-Create a reusable view that handles the static image rendering and the SwiftUI animation system (breathing, jitter, etc.).
-- Input: `MascotMoodState`, `size`
-- Internal: `@State private var isAnimating`
-- Logic: Applications of `scaleEffect`, `offset`, and `rotationEffect` based on state.
+```swift
+struct CardDetailShell<Content: View>: View {
+    let title: String
+    let icon: String
+    let timestamp: Date
+    let contextTag: String?
+    let primaryAction: (() -> Void)?
+    let primaryActionLabel: String
+    let onDelete: (() -> Void)?
+    @ViewBuilder let content: () -> Content
+}
+```
 
-#### [NEW] [MonchView.swift](file:///Users/ananthradhakrishnan/Documents/Projects/Monch/monch/Views/Mascot/MonchView.swift)
-The full-screen sheet that expands when the header is tapped.
-- Large `MonchAvatar` (200x200)
-- Detailed status and prompt text
-- Quick action buttons (Log Meal, etc.)
-- Metadata summary section
+**Design Tokens:**
+- Corner radius: 24pt (`CornerRadius.xl`)
+- Background: `cream` / `warmCharcoal`
+- Padding: 16pt
 
-#### [NEW] [MonchEmptyStateView.swift](file:///Users/ananthradhakrishnan/Documents/Projects/Monch/monch/Views/Timeline/MonchEmptyStateView.swift)
-A dedicated empty state view replacing the `ContentUnavailableView` in `ContentView`.
-- Large "Hungry" `MonchAvatar`
-- Onboarding call-to-action
+---
 
-#### [MODIFY] [MascotHeader.swift](file:///Users/ananthradhakrishnan/Documents/Projects/Monch/monch/Views/Mascot/MascotHeader.swift)
-- Replace internal `mascotImage` logic with the new `MonchAvatar` component.
-- Add tap gesture state to trigger `MonchView` sheet.
+### 2. FoodCard Detail View
+#### [NEW] `monch/Views/Cards/FoodCardView.swift`
 
-#### [MODIFY] [ContentView.swift](file:///Users/ananthradhakrishnan/Documents/Projects/Monch/monch/ContentView.swift)
-- Replace `ContentUnavailableView` with `MonchEmptyStateView`.
-- Manage the presentation state for the `MonchView` sheet.
+**Features:**
+- View/edit meal details
+- Serving size multiplier (0.5, 1, 1.5, 2)
+- Live macro recalculation
+- Expandable micronutrients section
+- Delete with confirmation
+
+**Layout (from spec):**
+```
+┌─────────────────────────────────────┐
+│  ← Back                       Save  │
+├─────────────────────────────────────┤
+│  🍽️ [Meal Name]                     │
+│  [Time] • [Context Tag]             │
+├─────────────────────────────────────┤
+│  Serving Size: [stepper]            │
+├─────────────────────────────────────┤
+│  📊 MACROS                          │
+│  Calories / Carbs / Protein / Fat   │
+│  ▼ Micronutrients (expandable)     │
+├─────────────────────────────────────┤
+│  [ Delete Entry ]                   │
+└─────────────────────────────────────┘
+```
+
+---
+
+### 3. Timeline Integration
+#### [MODIFY] `monch/Views/Timeline/TimelineView.swift`
+- Add `@State private var selectedMeal: MealLog?`
+- Make MealCard rows tappable → open FoodCardView sheet
+- Handle delete callback to remove from SwiftData
+
+---
+
+### 4. Design System Updates
+#### [MODIFY] `monch/DesignSystem/Spacing.swift`
+- Add `CornerRadius.xl = 24` if not present
+
+---
+
+## Files Changed
+| File | Action |
+|------|--------|
+| `CardDetailShell.swift` | NEW |
+| `FoodCardView.swift` | NEW |
+| `TimelineView.swift` | MODIFY |
+| `Spacing.swift` | MODIFY |
+
+---
 
 ## Verification Plan
 
-### Manual Verification
-1. **Empty State Check:** Launch app with empty data and verify "Hungry" Monch appears with animations.
-2. **Animation Smoke Test:** Use a debug menu or preview to cycle through all 7 mascot states and verify:
-   - "Spiking" jitters
-   - "Crashing" melts
-   - "Sleepy" nods
-   - "Neutral" breathes
-3. **Sheet Interaction:** Tap the header and verify `MonchView` slides up with the large mascot and actions.
-4. **Dark Mode:** Verify colors and gradients in `MonchView` adapt correctly to dark/light mode.
+### Build Test
+```bash
+xcodebuild -scheme monch build
+```
+
+### Manual Test
+1. Log a meal via food search
+2. Tap meal on timeline → FoodCardView opens
+3. Adjust serving size → macros recalculate
+4. Tap Delete → confirm → meal removed from timeline

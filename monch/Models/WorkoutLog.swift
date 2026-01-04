@@ -86,6 +86,7 @@ final class WorkoutLog {
         dominantHRZone: Int? = nil,
         sourceBundleId: String? = nil
     ) {
+        precondition(endTime >= startTime, "Workout end time must be after or equal to start time")
         self.id = id
         self.startTime = startTime
         self.endTime = endTime

@@ -74,6 +74,7 @@ final class SleepLog {
         notes: String? = nil,
         sourceBundleId: String? = nil
     ) {
+        precondition(endTime >= startTime, "Sleep end time must be after or equal to start time")
         self.id = id
         self.startTime = startTime
         self.endTime = endTime
