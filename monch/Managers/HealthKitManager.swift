@@ -59,25 +59,27 @@ class HealthKitManager: ObservableObject {
         
         do {
             try await healthStore.requestAuthorization(toShare: [], read: requiredReadTypes)
-            await checkAuthorizationStatus()
+            // Note: For read-only permissions, iOS doesn't tell us if user granted or denied
+            // We assume success if no error was thrown. The actual test is whether data comes back.
+            isAuthorized = true
             print("HealthKit authorization request complete.")
         } catch {
             self.authorizationError = error
+            isAuthorized = false
             print("HealthKit authorization failed: \(error.localizedDescription)")
         }
     }
     
-    /// Check if we have authorization for at least heart rate data
-    func checkAuthorizationStatus() async {
-        let heartRateType = HKQuantityType(.heartRate)
-        let status = healthStore.authorizationStatus(for: heartRateType)
-        
-        switch status {
-        case .sharingAuthorized:
+    /// Verify we can actually read data (the real test for read permissions)
+    func verifyDataAccess() async {
+        do {
+            let range = Date().addingTimeInterval(-86400)...Date()
+            let samples = try await fetchHeartRateSamples(for: range)
+            // If we got here without error, we have access
+            // Empty results just means no data, not denied access
             isAuthorized = true
-        case .sharingDenied, .notDetermined:
-            isAuthorized = false
-        @unknown default:
+        } catch {
+            // Actual fetch error likely means no access
             isAuthorized = false
         }
     }
