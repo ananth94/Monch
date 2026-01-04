@@ -102,17 +102,6 @@ struct CardDetailShell<Content: View>: View {
                     }
                 }
             }
-            .confirmationDialog(
-                "Delete this entry?",
-                isPresented: $showingDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    onDelete?()
-                    dismiss()
-                }
-                Button("Cancel", role: .cancel) {}
-            }
         }
         .presentationDragIndicator(.visible)
     }
@@ -169,6 +158,17 @@ struct CardDetailShell<Content: View>: View {
             .padding()
             .background(Color.Monch.coral.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.xl))
+        }
+        .confirmationDialog(
+            "Delete this entry?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                onDelete?()
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
         }
     }
     
