@@ -4,6 +4,7 @@
 //
 //  Detail card for viewing/editing a logged meal.
 //  Shows serving size multiplier, macros with fiber/sugars hierarchy, and delete.
+//  Updated for "Cozy Science" design language with glass cards and pill selector.
 //
 
 import SwiftUI
@@ -31,6 +32,13 @@ struct FoodCardView: View {
         if let protein = meal.protein, protein > 30 { return "💪 High Protein" }
         if let fat = meal.fat, fat > 25 { return "🥑 High Fat" }
         return nil
+    }
+    
+    /// Determine mood based on meal composition
+    private var cardMood: GradientMood {
+        guard let carbs = meal.carbs else { return .neutral }
+        if carbs > 50 { return .acute }  // High carb = potential spike
+        return .neutral
     }
     
     // Scaled values
@@ -92,15 +100,14 @@ struct FoodCardView: View {
             icon: "🍽️",
             timestamp: meal.timestamp,
             contextTag: contextTag,
+            mood: cardMood,
             primaryActionLabel: primaryActionLabel,
             onPrimaryAction: primaryAction,
             onDelete: onDelete
         ) {
-            VStack(spacing: 24) {
+            VStack(spacing: Spacing.lg) {
                 // Serving Size Section
                 servingSizeSection
-                
-                Divider()
                 
                 // Macros Section
                 macrosSection
@@ -114,31 +121,16 @@ struct FoodCardView: View {
     // MARK: - Serving Size
     
     private var servingSizeSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Serving Size")
-                .font(.Monch.headline)
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("serving size")
+                .font(.Monch.caption)
                 .foregroundStyle(.secondary)
             
-            HStack(spacing: 12) {
-                ForEach(servingOptions, id: \.self) { option in
-                    Button {
-                        withAnimation(.spring(response: 0.3)) {
-                            servingMultiplier = option
-                        }
-                    } label: {
-                        Text(formatMultiplier(option))
-                            .font(.Monch.body)
-                            .fontWeight(servingMultiplier == option ? .semibold : .regular)
-                            .foregroundStyle(servingMultiplier == option ? .white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(servingMultiplier == option ? Color.Monch.sage : Color.primary.opacity(0.05))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
+            MonchPillSelector(
+                options: servingOptions,
+                selection: $servingMultiplier
+            ) { option in
+                formatMultiplier(option)
             }
         }
     }
@@ -154,13 +146,13 @@ struct FoodCardView: View {
     // MARK: - Macros Section
     
     private var macrosSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("MACROS", systemImage: "chart.bar.fill")
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Label("macros", systemImage: "chart.bar.fill")
                 .font(.Monch.caption)
                 .foregroundStyle(.secondary)
             
-            VStack(spacing: 12) {
-                // Calories
+            VStack(spacing: Spacing.sm) {
+                // Calories - highlighted
                 if let cal = scaledCalories {
                     MacroRow(label: "Calories", value: "\(Int(cal)) kcal", isHighlighted: true)
                 }
@@ -172,30 +164,12 @@ struct FoodCardView: View {
                         
                         // Fiber (nested)
                         if let fiber = scaledFiber {
-                            HStack {
-                                Text("└─ Fiber")
-                                    .font(.Monch.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text("\(Int(fiber))g")
-                                    .font(.Monch.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.leading, 20)
+                            NestedMacroRow(label: "Fiber", value: "\(Int(fiber))g")
                         }
                         
                         // Sugars (nested)
                         if let sugar = scaledSugar {
-                            HStack {
-                                Text("└─ Sugars")
-                                    .font(.Monch.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text("\(Int(sugar))g")
-                                    .font(.Monch.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.leading, 20)
+                            NestedMacroRow(label: "Sugars", value: "\(Int(sugar))g")
                         }
                     }
                 }
@@ -216,7 +190,7 @@ struct FoodCardView: View {
     // MARK: - Micronutrients
     
     private var micronutrientsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Button {
                 withAnimation(.spring(response: 0.3)) {
                     showMicronutrients.toggle()
@@ -225,7 +199,7 @@ struct FoodCardView: View {
                 HStack {
                     Image(systemName: showMicronutrients ? "chevron.down" : "chevron.right")
                         .font(.caption)
-                    Text("Micronutrients")
+                    Text("micronutrients")
                         .font(.Monch.subheadline)
                 }
                 .foregroundStyle(.secondary)
@@ -233,27 +207,29 @@ struct FoodCardView: View {
             .buttonStyle(.plain)
             
             if showMicronutrients {
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 12) {
-                    if let caffeine = scaledCaffeine {
-                        MicroRow(label: "Caffeine", value: "\(Int(caffeine))mg")
-                    }
-                    
-                    // Placeholder for future micronutrients
-                    if meal.magnesium != nil || meal.zinc != nil {
+                MonchCard {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: Spacing.sm) {
+                        if let caffeine = scaledCaffeine {
+                            MicroRow(label: "Caffeine", value: "\(Int(caffeine))mg")
+                        }
+                        
                         if let mg = meal.magnesium {
                             MicroRow(label: "Magnesium", value: "\(Int(mg * servingMultiplier))mg")
                         }
                         if let zn = meal.zinc {
                             MicroRow(label: "Zinc", value: "\(Int(zn * servingMultiplier))mg")
                         }
+                        if let na = meal.sodium {
+                            MicroRow(label: "Sodium", value: "\(Int(na * servingMultiplier))mg")
+                        }
+                        if let fe = meal.iron {
+                            MicroRow(label: "Iron", value: "\(Int(fe * servingMultiplier))mg")
+                        }
                     }
                 }
-                .padding()
-                .background(Color.primary.opacity(0.02))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
     }
@@ -290,6 +266,24 @@ private struct MacroRow: View {
                 .font(isHighlighted ? .Monch.headline : .Monch.body)
                 .foregroundStyle(isHighlighted ? Color.Monch.sage : .primary)
         }
+    }
+}
+
+private struct NestedMacroRow: View {
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text("└─ \(label)")
+                .font(.Monch.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.Monch.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.leading, Spacing.lg)
     }
 }
 

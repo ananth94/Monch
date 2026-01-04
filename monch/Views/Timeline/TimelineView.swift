@@ -13,12 +13,17 @@ struct TimelineView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MealLog.timestamp, order: .reverse) private var meals: [MealLog]
     @Query(sort: \InsightEvent.timestamp, order: .reverse) private var insights: [InsightEvent]
+    @Query(sort: \WorkoutLog.startTime, order: .reverse) private var workouts: [WorkoutLog]
+    @Query(sort: \SleepLog.startTime, order: .reverse) private var sleepLogs: [SleepLog]
     @ObservedObject private var healthKit = HealthKitManager.shared
     @ObservedObject private var insightEngine = InsightEngine.shared
     
     @State private var showingMascotDetail = false
     @State private var showingFoodLogger = false
     @State private var selectedMeal: MealLog?
+    @State private var selectedInsight: InsightEvent?
+    @State private var selectedWorkout: WorkoutLog?
+    @State private var selectedSleep: SleepLog?
     
     var body: some View {
         NavigationStack {
@@ -87,6 +92,15 @@ struct TimelineView: View {
                     selectedMeal = nil
                 }
             }
+            .sheet(item: $selectedInsight) { insight in
+                InsightCardView(insight: insight)
+            }
+            .sheet(item: $selectedWorkout) { workout in
+                ExerciseCardView(workout: workout)
+            }
+            .sheet(item: $selectedSleep) { sleep in
+                SleepCardView(sleepLog: sleep)
+            }
         }
     }
     
@@ -98,9 +112,13 @@ struct TimelineView: View {
                 ForEach(groupedByDay, id: \.key) { day, items in
                     Section {
                         ForEach(items.sorted(by: { $0.timestamp > $1.timestamp })) { item in
-                            TimelineItemRow(item: item) { meal in
-                                selectedMeal = meal
-                            }
+                            TimelineItemRow(
+                                item: item,
+                                onMealTap: { selectedMeal = $0 },
+                                onInsightTap: { selectedInsight = $0 },
+                                onWorkoutTap: { selectedWorkout = $0 },
+                                onSleepTap: { selectedSleep = $0 }
+                            )
                             .padding(.horizontal)
                             .padding(.vertical, 6)
                         }
@@ -119,8 +137,10 @@ struct TimelineView: View {
     
     private var timelineItems: [TimelineItem] {
         let mealItems = meals.map { TimelineItem.meal($0) }
-        let insightItems = insights.map { TimelineItem.insight($0) }
-        return (mealItems + insightItems).sorted { $0.timestamp > $1.timestamp }
+        let insightItems = insights.filter { !$0.isDismissed }.map { TimelineItem.insight($0) }
+        let workoutItems = workouts.map { TimelineItem.workout($0) }
+        let sleepItems = sleepLogs.map { TimelineItem.sleep($0) }
+        return (mealItems + insightItems + workoutItems + sleepItems).sorted { $0.timestamp > $1.timestamp }
     }
     
     private var groupedByDay: [(key: Date, value: [TimelineItem])] {
@@ -173,11 +193,15 @@ struct TimelineView: View {
 enum TimelineItem: Identifiable {
     case meal(MealLog)
     case insight(InsightEvent)
+    case workout(WorkoutLog)
+    case sleep(SleepLog)
     
     var id: UUID {
         switch self {
         case .meal(let meal): return meal.id
         case .insight(let insight): return insight.id
+        case .workout(let workout): return workout.id
+        case .sleep(let sleep): return sleep.id
         }
     }
     
@@ -185,6 +209,8 @@ enum TimelineItem: Identifiable {
         switch self {
         case .meal(let meal): return meal.timestamp
         case .insight(let insight): return insight.timestamp
+        case .workout(let workout): return workout.startTime
+        case .sleep(let sleep): return sleep.startTime
         }
     }
 }
@@ -194,16 +220,24 @@ enum TimelineItem: Identifiable {
 struct TimelineItemRow: View {
     let item: TimelineItem
     var onMealTap: ((MealLog) -> Void)?
+    var onInsightTap: ((InsightEvent) -> Void)?
+    var onWorkoutTap: ((WorkoutLog) -> Void)?
+    var onSleepTap: ((SleepLog) -> Void)?
     
     var body: some View {
         switch item {
         case .meal(let meal):
             MealCard(meal: meal)
-                .onTapGesture {
-                    onMealTap?(meal)
-                }
+                .onTapGesture { onMealTap?(meal) }
         case .insight(let insight):
-            InsightCardPlaceholder(insight: insight)
+            InsightTimelineCard(insight: insight)
+                .onTapGesture { onInsightTap?(insight) }
+        case .workout(let workout):
+            WorkoutTimelineCard(workout: workout)
+                .onTapGesture { onWorkoutTap?(workout) }
+        case .sleep(let sleep):
+            SleepTimelineCard(sleep: sleep)
+                .onTapGesture { onSleepTap?(sleep) }
         }
     }
 }
@@ -263,29 +297,33 @@ struct MealCard: View {
     }
 }
 
-// MARK: - Insight Card Placeholder
+// MARK: - Insight Timeline Card
 
-struct InsightCardPlaceholder: View {
+struct InsightTimelineCard: View {
     let insight: InsightEvent
     
     var body: some View {
         HStack(spacing: 12) {
             // Icon
-            Image(systemName: insightIcon)
+            Text(insight.type.icon)
                 .font(.title2)
-                .foregroundStyle(insightColor)
                 .frame(width: 40)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(insight.type.rawValue.capitalized)
+                Text(insight.type.displayTitle)
                     .font(.Monch.headline)
                 
                 Text(insight.message)
                     .font(.Monch.callout)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
             
             Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .padding()
         .background(
@@ -296,17 +334,7 @@ struct InsightCardPlaceholder: View {
                         .strokeBorder(insightColor.opacity(0.3), lineWidth: 1)
                 )
         )
-    }
-    
-    private var insightIcon: String {
-        switch insight.type {
-        case .sugarSpike: return "waveform.path.ecg"
-        case .digestionDebt: return "moon.zzz"
-        case .muscleSponge: return "dumbbell"
-        case .anxietyMimic: return "heart.circle"
-        case .goodSpike: return "checkmark.circle"
-        case .deepSleepRobber: return "bed.double"
-        }
+        .contentShape(Rectangle())
     }
     
     private var insightColor: Color {
@@ -315,6 +343,163 @@ struct InsightCardPlaceholder: View {
         case .digestionDebt, .deepSleepRobber: return Color.Monch.periwinkle
         case .muscleSponge, .goodSpike: return Color.Monch.sage
         }
+    }
+}
+
+// MARK: - Workout Timeline Card
+
+struct WorkoutTimelineCard: View {
+    let workout: WorkoutLog
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Time
+            Text(workout.startTime, format: .dateTime.hour().minute())
+                .font(.Monch.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 50, alignment: .leading)
+            
+            // Icon
+            Text(workout.category.icon)
+                .font(.title2)
+            
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                Text(workout.activityName)
+                    .font(.Monch.headline)
+                
+                HStack(spacing: 8) {
+                    Text(workout.formattedDuration)
+                        .font(.Monch.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    if let distance = workout.formattedDistance {
+                        Text("•")
+                            .foregroundStyle(.tertiary)
+                        Text(distance)
+                            .font(.Monch.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    if let cal = workout.activeCalories {
+                        Text("•")
+                            .foregroundStyle(.tertiary)
+                        Text("\(Int(cal)) kcal")
+                            .font(.Monch.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                // Anabolic Window Indicator
+                if workout.isInAnabolicWindow {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bolt.fill")
+                            .font(.caption2)
+                        Text("Anabolic window: \(workout.formattedAnabolicWindowRemaining ?? "Active")")
+                            .font(.Monch.caption2)
+                    }
+                    .foregroundStyle(Color.Monch.sage)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.Monch.sage.opacity(0.15))
+                    .clipShape(Capsule())
+                }
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Monch.sage.opacity(0.1))
+        )
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Sleep Timeline Card
+
+struct SleepTimelineCard: View {
+    let sleep: SleepLog
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            Text("😴")
+                .font(.title2)
+                .frame(width: 40)
+            
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Last Night's Sleep")
+                    .font(.Monch.headline)
+                
+                HStack(spacing: 8) {
+                    Text(sleep.formattedDuration)
+                        .font(.Monch.callout)
+                        .foregroundStyle(.secondary)
+                    
+                    Text("•")
+                        .foregroundStyle(.tertiary)
+                    
+                    Text("\(Int(sleep.computedQualityScore * 100))% quality")
+                        .font(.Monch.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                // Stage summary
+                HStack(spacing: 4) {
+                    SleepStagePill(label: "Deep", minutes: sleep.deepSleepMinutes, color: .Monch.periwinkle)
+                    SleepStagePill(label: "REM", minutes: sleep.remSleepMinutes, color: .Monch.lavender)
+                }
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Monch.periwinkle.opacity(0.1))
+        )
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SleepStagePill: View {
+    let label: String
+    let minutes: Int
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text("\(label) \(formatMinutes(minutes))")
+                .font(.Monch.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
+    }
+    
+    private func formatMinutes(_ minutes: Int) -> String {
+        let hours = minutes / 60
+        let mins = minutes % 60
+        if hours > 0 {
+            return "\(hours)h \(mins)m"
+        }
+        return "\(mins)m"
     }
 }
 

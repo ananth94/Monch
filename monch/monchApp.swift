@@ -14,7 +14,9 @@ struct monchApp: App {
         let schema = Schema([
             MealLog.self,
             InsightEvent.self,
-            MascotStateLog.self
+            MascotStateLog.self,
+            SleepLog.self,
+            WorkoutLog.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -30,7 +32,12 @@ struct monchApp: App {
             ContentView()
                 .onAppear {
                     Task {
+                        // Request HealthKit authorization
                         await HealthKitManager.shared.requestAuthorization()
+                        
+                        // Sync health data to local storage for ambient insights
+                        let context = sharedModelContainer.mainContext
+                        await HealthKitSyncService.shared.syncAll(modelContext: context)
                     }
                 }
         }
