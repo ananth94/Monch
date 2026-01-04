@@ -22,6 +22,8 @@ struct TimelineView: View {
     @State private var showingFoodLogger = false
     @State private var showingExerciseLogger = false
     @State private var showingSleepLogger = false
+    @State private var showingCaffeineLogger = false
+    @State private var showingSupplementLogger = false
     @State private var selectedMeal: MealLog?
     @State private var selectedInsight: InsightEvent?
     @State private var selectedWorkout: WorkoutLog?
@@ -79,6 +81,20 @@ struct TimelineView: View {
                         }
                         
                         Button {
+                            showingCaffeineLogger = true
+                        } label: {
+                            Label("Quick Caffeine", systemImage: "cup.and.saucer.fill")
+                        }
+                        
+                        Button {
+                            showingSupplementLogger = true
+                        } label: {
+                            Label("Supplement Stack", systemImage: "pills.fill")
+                        }
+                        
+                        Divider()
+                        
+                        Button {
                             showingExerciseLogger = true
                         } label: {
                             Label("Log Exercise", systemImage: "figure.run")
@@ -120,6 +136,20 @@ struct TimelineView: View {
                 SleepLogView { _ in
                     // Sleep logged, refresh timeline
                     insightEngine.refreshMood(meals: meals, insights: insights)
+                }
+            }
+            .sheet(isPresented: $showingCaffeineLogger) {
+                CaffeineQuickAddView { meal in
+                    Task {
+                        await insightEngine.analyzeMeal(meal, in: modelContext)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingSupplementLogger) {
+                SupplementStackView { meal in
+                    Task {
+                        await insightEngine.analyzeMeal(meal, in: modelContext)
+                    }
                 }
             }
             .onAppear {
