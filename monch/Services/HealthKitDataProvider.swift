@@ -13,6 +13,12 @@ protocol HealthKitDataProvider: Sendable {
     func fetchHeartRateSamples(for range: ClosedRange<Date>) async throws -> [HeartRateSample]
     func fetchSleepSamples(for range: ClosedRange<Date>) async throws -> [SleepSample]
     func fetchBaselineRestingHeartRate(for range: ClosedRange<Date>) async throws -> Double?
+    
+    // MARK: - HRV Methods (Sprint 12)
+    func fetchHRVSamples(for range: ClosedRange<Date>) async throws -> [HRVSample]
+    func fetchBaselineHRV(for range: ClosedRange<Date>) async throws -> Double?
+    func fetchOvernightHRV(sleepStart: Date, sleepEnd: Date) async throws -> Double?
+    func fetchMorningHRV(for date: Date) async throws -> Double?
 }
 
 /// Simplified heart rate sample for cross-boundary use
@@ -171,6 +177,59 @@ extension HealthKitManager: HealthKitDataProvider {
         
         return samples.first?.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
     }
+    
+    // MARK: - HRV Methods (Sprint 12)
+    
+    nonisolated func fetchHRVSamples(for range: ClosedRange<Date>) async throws -> [HRVSample] {
+        let hrvType = HKQuantityType(.heartRateVariabilitySDNN)
+        let predicate = HKQuery.predicateForSamples(withStart: range.lowerBound, end: range.upperBound)
+        
+        let samples: [HKQuantitySample] = try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: hrvType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
+            ) { _, samples, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: samples as? [HKQuantitySample] ?? [])
+            }
+            self.healthStore.execute(query)
+        }
+        
+        return samples.map { HRVSample(from: $0) }
+    }
+    
+    /// Helper to compute average SDNN from samples
+    private nonisolated func computeAverageSDNN(_ samples: [HRVSample]) -> Double? {
+        guard !samples.isEmpty else { return nil }
+        return samples.map(\.sdnn).reduce(0, +) / Double(samples.count)
+    }
+    
+    nonisolated func fetchBaselineHRV(for range: ClosedRange<Date>) async throws -> Double? {
+        let samples = try await fetchHRVSamples(for: range)
+        return computeAverageSDNN(samples)
+    }
+    
+    nonisolated func fetchOvernightHRV(sleepStart: Date, sleepEnd: Date) async throws -> Double? {
+        let samples = try await fetchHRVSamples(for: sleepStart...sleepEnd)
+        return computeAverageSDNN(samples)
+    }
+    
+    nonisolated func fetchMorningHRV(for date: Date) async throws -> Double? {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: date)
+        // TODO: Improve by using actual wake time from sleep data
+        let morningEnd = calendar.date(byAdding: .hour, value: 10, to: dayStart)!
+        
+        let samples = try await fetchHRVSamples(for: dayStart...morningEnd)
+        
+        // Get earliest sample (first reading after wake)
+        return samples.sorted { $0.timestamp < $1.timestamp }.first?.sdnn
+    }
 }
 
 // MARK: - Mock Implementation for Testing
@@ -196,5 +255,31 @@ final class MockHealthKitDataProvider: HealthKitDataProvider, @unchecked Sendabl
     
     func fetchBaselineRestingHeartRate(for range: ClosedRange<Date>) async throws -> Double? {
         return 65.0 // Mock resting HR
+    }
+    
+    // MARK: - HRV Methods (Sprint 12)
+    
+    var hrvSamples: [HRVSample] = []
+    var baselineHRV: Double = 50.0
+    
+    func fetchHRVSamples(for range: ClosedRange<Date>) async throws -> [HRVSample] {
+        if shouldThrowError {
+            throw NSError(domain: "MockError", code: -1)
+        }
+        return hrvSamples.filter { range.contains($0.timestamp) }
+    }
+    
+    func fetchBaselineHRV(for range: ClosedRange<Date>) async throws -> Double? {
+        return baselineHRV
+    }
+    
+    func fetchOvernightHRV(sleepStart: Date, sleepEnd: Date) async throws -> Double? {
+        let samples = hrvSamples.filter { $0.timestamp >= sleepStart && $0.timestamp <= sleepEnd }
+        guard !samples.isEmpty else { return baselineHRV * 0.9 }
+        return samples.map(\.sdnn).reduce(0, +) / Double(samples.count)
+    }
+    
+    func fetchMorningHRV(for date: Date) async throws -> Double? {
+        return baselineHRV
     }
 }

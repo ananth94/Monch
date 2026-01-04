@@ -206,15 +206,16 @@ class InsightEngine: ObservableObject {
     /// Algorithm from Insights_Library.md:
     /// - Trigger: meal_time > (sleep_start - 3h)
     /// - Logic: nocturnal_dip < 10%
+    /// 
+    /// Sprint 12 Enhancement: Uses HRV confirmation when analyzing post-sleep
     private func detectDigestionDebt(for meal: MealLog) async -> InsightEvent? {
         let mealHour = Calendar.current.component(.hour, from: meal.timestamp)
         
         // Simple heuristic: meals after 8 PM are "late"
-        // In future, use actual sleep schedule from HealthKit
         guard mealHour >= 20 else { return nil }
         
-        // Calculate severity based on how late
-        let severity: Double
+        // Calculate base severity based on how late
+        var severity: Double
         if mealHour >= 22 {
             severity = 0.9
         } else if mealHour >= 21 {
@@ -223,15 +224,69 @@ class InsightEngine: ObservableObject {
             severity = 0.3
         }
         
+        var message: String
         let hourString = mealHour >= 22 ? "very late" : "late"
+        
+        // Sprint 12: Try to get HRV confirmation if we're analyzing past meals
+        // (i.e., a night has passed since the meal)
+        let hoursSinceMeal = Date().timeIntervalSince(meal.timestamp) / 3600
+        if hoursSinceMeal > 8 {
+            // We can check overnight HRV to confirm the debt
+            if let hrvConfirmation = await checkOvernightHRVDip(after: meal.timestamp) {
+                if hrvConfirmation.dipPercentage < 0.10 {
+                    // HRV confirms poor recovery
+                    severity = min(severity + 0.2, 1.0)
+                    message = "That \(hourString) dinner suppressed overnight HRV by only \(Int(hrvConfirmation.dipPercentage * 100))%. Recovery was impacted."
+                } else {
+                    // HRV shows normal recovery - reduce severity
+                    severity = max(severity - 0.2, 0.1)
+                    message = "Late dinner, but your HRV recovered well. Consider this a gentle reminder."
+                }
+            } else {
+                message = "Eating this \(hourString) may keep your heart working while you sleep, reducing recovery."
+            }
+        } else {
+            // Real-time prediction (before sleep)
+            message = "Eating this \(hourString) may keep your heart working while you sleep, reducing recovery."
+        }
         
         return InsightEvent(
             timestamp: meal.timestamp,
             type: .digestionDebt,
             severity: severity,
-            message: "Eating this \(hourString) may keep your heart working while you sleep, reducing recovery.",
+            message: message,
             associatedMealID: meal.id
         )
+    }
+    
+    /// Check overnight HRV dip (should be >10% for good recovery)
+    private func checkOvernightHRVDip(after mealTime: Date) async -> (dipPercentage: Double, overnightHRV: Double)? {
+        // Find the sleep window after this meal
+        let assumedSleepStart = Calendar.current.date(byAdding: .hour, value: 3, to: mealTime)!
+        let assumedSleepEnd = Calendar.current.date(byAdding: .hour, value: 10, to: mealTime)!
+        
+        do {
+            // Get overnight HRV
+            let overnightHRV = try await healthKitProvider.fetchOvernightHRV(
+                sleepStart: assumedSleepStart,
+                sleepEnd: assumedSleepEnd
+            )
+            
+            // Get 7-day baseline
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange)
+            
+            guard let overnight = overnightHRV, let base = baseline, base > 0 else { return nil }
+            
+            // Calculate dip (overnight should be similar or higher than baseline during rest)
+            // A "dip" here means overnight is LOWER than baseline (bad sign)
+            let dip = (base - overnight) / base
+            
+            return (dipPercentage: max(0, dip), overnightHRV: overnight)
+        } catch {
+            print("InsightEngine: Failed to check overnight HRV dip: \(error)")
+            return nil
+        }
     }
     
     // MARK: - Mood Mapping
@@ -256,6 +311,13 @@ class InsightEngine: ObservableObject {
             return .sleepy
         case .muscleSponge, .goodSpike, .zone2Drain:
             return .strong
+        // HRV-Powered insights (Sprint 12)
+        case .recoveryGap, .mealImpactScore, .alcoholImpact:
+            return .crashing
+        case .stressBuffer, .fastingBenefit, .morningReadiness:
+            return .strong
+        case .mineralGap, .brainFogForecast:
+            return .sleepy
         }
     }
     
@@ -376,6 +438,7 @@ class InsightEngine: ObservableObject {
     
     /// Detects when low blood sugar mimics anxiety symptoms
     /// Algorithm: 2-3h after high-carb meal + HR dropping + HRV low
+    /// Sprint 12: Now includes HRV confirmation for higher confidence
     func detectAnxietyMimic(for meal: MealLog, in modelContext: ModelContext) async -> InsightEvent? {
         // Trigger: high carb meal 2-3 hours ago
         guard let carbs = meal.carbs, carbs > 40 else { return nil }
@@ -399,13 +462,39 @@ class InsightEngine: ObservableObject {
             
             let gradient = (last.bpm - first.bpm) / timeDelta
             
+            // Sprint 12: Add HRV confirmation
+            let recentHRV = try await healthKitProvider.fetchHRVSamples(for: recentRange)
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            let baselineHRV = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) ?? 50.0
+            
+            let currentHRV: Double
+            if !recentHRV.isEmpty {
+                currentHRV = recentHRV.map(\.sdnn).reduce(0, +) / Double(recentHRV.count)
+            } else {
+                currentHRV = baselineHRV // Default to baseline if no recent data
+            }
+            
+            // HRV suppressed = below 80% of baseline
+            let hrvSuppressed = currentHRV < baselineHRV * 0.8
+            let hrvDeficit = Int((1 - currentHRV / baselineHRV) * 100)
+            
             // Detect rapid HR drop (anxiety mimic signal)
-            if gradient < -1.0 {
+            // Requires BOTH HR dropping AND HRV suppressed for high confidence
+            if gradient < -1.0 && hrvSuppressed {
                 return InsightEvent(
                     timestamp: Date(),
                     type: .anxietyMimic,
                     severity: min(abs(gradient) / 5, 1.0),
-                    message: "Feeling anxious? It might be a blood sugar dip from that \(meal.name). Try a small snack.",
+                    message: "Feeling anxious? Your HRV is \(hrvDeficit)% below normal—likely a blood sugar dip from \(meal.name), not stress.",
+                    associatedMealID: meal.id
+                )
+            } else if gradient < -2.0 {
+                // Very rapid drop even without HRV confirmation
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .anxietyMimic,
+                    severity: min(abs(gradient) / 5, 0.7), // Lower severity without HRV
+                    message: "Feeling jittery? It might be a blood sugar dip from \(meal.name). Try a small snack.",
                     associatedMealID: meal.id
                 )
             }
@@ -419,7 +508,8 @@ class InsightEngine: ObservableObject {
     // MARK: - Caffeine Jitter Detection (P1)
     
     /// Detects caffeine-induced elevated heart rate (not anxiety)
-    /// Algorithm: >100mg caffeine in last 4h + HR elevated + stable respiratory
+    /// Algorithm: >100mg caffeine in last 4h + HR elevated + stable HRV
+    /// Sprint 12: Uses HRV stability to distinguish caffeine from stress
     func detectCaffeineJitter(for meals: [MealLog]) async -> InsightEvent? {
         let fourHoursAgo = Date().addingTimeInterval(-4 * 3600)
         
@@ -446,12 +536,36 @@ class InsightEngine: ObservableObject {
             // Dynamic threshold: restingHR + 15 bpm
             let threshold = restingHR + 15
             
-            if avgHR > threshold {
+            // Sprint 12: Check HRV stability
+            let recentHRV = try await healthKitProvider.fetchHRVSamples(for: recentRange)
+            let baselineHRV = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) ?? 50.0
+            
+            let avgHRV: Double
+            if !recentHRV.isEmpty {
+                avgHRV = recentHRV.map(\.sdnn).reduce(0, +) / Double(recentHRV.count)
+            } else {
+                avgHRV = baselineHRV
+            }
+            
+            // HRV is "stable" if within 15% of baseline
+            let hrvStable = abs(avgHRV - baselineHRV) / baselineHRV < 0.15
+            
+            if avgHR > threshold && hrvStable {
+                // Classic caffeine pattern: HR up, HRV stable
                 return InsightEvent(
                     timestamp: Date(),
                     type: .caffeineJitter,
                     severity: min((avgHR - threshold) / 30.0, 1.0),
-                    message: "Alert mode activated! That's \(Int(recentCaffeine))mg of caffeine working. Great time for focused work.",
+                    message: "Alert mode activated! That's \(Int(recentCaffeine))mg caffeine working. HRV stable—this is focus, not stress.",
+                    associatedMealID: meals.first?.id
+                )
+            } else if avgHR > threshold + 10 {
+                // Very elevated HR even without HRV data
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .caffeineJitter,
+                    severity: min((avgHR - threshold) / 30.0, 0.6),
+                    message: "Caffeine is in your system (\(Int(recentCaffeine))mg). Heart rate elevated by +\(Int(avgHR - restingHR)) bpm.",
                     associatedMealID: meals.first?.id
                 )
             }
@@ -541,5 +655,411 @@ class InsightEngine: ObservableObject {
         }
         
         return nil
+    }
+    
+    // MARK: - Sprint 12: New HRV-Powered Detectors
+    
+    /// Detects under-fueling after workout via slow HRV recovery
+    /// Algorithm: Workout burned >300kcal + calories consumed <50% + slow HRV slope
+    func detectRecoveryGap(for workout: WorkoutLog, in modelContext: ModelContext) async -> InsightEvent? {
+        let workoutEnd = workout.endTime
+        let now = Date()
+        
+        // Must be at least 1 hour post-workout
+        guard now.timeIntervalSince(workoutEnd) > 3600 else { return nil }
+        
+        // Check caloric intake since workout
+        let mealPredicate = #Predicate<MealLog> { meal in
+            meal.timestamp > workoutEnd
+        }
+        
+        do {
+            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
+            let caloriesConsumed = meals.compactMap { $0.calories }.reduce(0, +)
+            let caloriesBurned = workout.activeCalories ?? 0
+            
+            // Under-fueled if consumed < 50% of burned
+            guard caloriesBurned > 300 && caloriesConsumed < caloriesBurned * 0.5 else { return nil }
+            
+            // Check HRV recovery slope (should rise post-workout)
+            let recoveryRange = workoutEnd...min(workoutEnd.addingTimeInterval(3600), now)
+            let recoveryHRV = try await healthKitProvider.fetchHRVSamples(for: recoveryRange)
+            
+            guard recoveryHRV.count >= 2 else { return nil }
+            
+            let sortedHRV = recoveryHRV.sorted { $0.timestamp < $1.timestamp }
+            let first = sortedHRV.first!.sdnn
+            let last = sortedHRV.last!.sdnn
+            let timeDelta = sortedHRV.last!.timestamp.timeIntervalSince(sortedHRV.first!.timestamp) / 3600
+            guard timeDelta > 0 else { return nil }
+            
+            let slope = (last - first) / timeDelta
+            
+            // Slow recovery = slope < 5 ms/hour
+            if slope < 5 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .recoveryGap,
+                    severity: min(1.0 - slope / 10, 1.0),
+                    message: "Your HRV isn't bouncing back. You burned \(Int(caloriesBurned)) kcal but only ate \(Int(caloriesConsumed)). Fuel up!",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Recovery Gap detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects morning readiness based on HRV vs baseline
+    /// Algorithm: Morning HRV compared to 7-day average
+    func detectMorningReadiness() async -> InsightEvent? {
+        do {
+            guard let morningHRV = try await healthKitProvider.fetchMorningHRV(for: Date()) else { return nil }
+            
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            guard let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) else { return nil }
+            
+            let readinessScore = morningHRV / baseline
+            let percentDiff = Int(abs(readinessScore - 1) * 100)
+            
+            if readinessScore >= 1.1 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .morningReadiness,
+                    severity: 0.2, // Positive
+                    message: "Fully charged! HRV is \(percentDiff)% above baseline. Great day for intensity!",
+                    associatedMealID: nil
+                )
+            } else if readinessScore < 0.85 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .morningReadiness,
+                    severity: 0.5 + (0.85 - readinessScore),
+                    message: "Recovery isn't complete. HRV is \(percentDiff)% below normal. Consider an easier day.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Morning Readiness detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects meal impact on HRV
+    /// Algorithm: Compare HRV before and after meal
+    func detectMealImpactScore(for meal: MealLog) async -> InsightEvent? {
+        // Need at least 1 hour post-meal
+        let hoursSinceMeal = Date().timeIntervalSince(meal.timestamp) / 3600
+        guard hoursSinceMeal >= 1 && hoursSinceMeal <= 2 else { return nil }
+        
+        let preMealRange = meal.timestamp.addingTimeInterval(-1800)...meal.timestamp
+        let postMealRange = meal.timestamp...meal.timestamp.addingTimeInterval(3600)
+        
+        do {
+            let preHRV = try await healthKitProvider.fetchHRVSamples(for: preMealRange)
+            let postHRV = try await healthKitProvider.fetchHRVSamples(for: postMealRange)
+            
+            guard !preHRV.isEmpty, !postHRV.isEmpty else { return nil }
+            
+            let preAvg = preHRV.map(\.sdnn).reduce(0, +) / Double(preHRV.count)
+            let postAvg = postHRV.map(\.sdnn).reduce(0, +) / Double(postHRV.count)
+            
+            let impact = (preAvg - postAvg) / preAvg
+            
+            if impact > 0.2 { // >20% drop = significant
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .mealImpactScore,
+                    severity: min(impact, 1.0),
+                    message: "That \(meal.name) dropped your HRV by \(Int(impact * 100))%. Your body is working hard to digest it.",
+                    associatedMealID: meal.id
+                )
+            }
+        } catch {
+            print("InsightEngine: Meal Impact Score failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects HRV improvement during fasting window
+    /// Algorithm: HRV trend during 12+ hour fast (awake samples only)
+    func detectFastingBenefit(in modelContext: ModelContext) async -> InsightEvent? {
+        // Get most recent meal
+        let mealDescriptor = FetchDescriptor<MealLog>(
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        
+        do {
+            let meals = try modelContext.fetch(mealDescriptor)
+            guard let lastMeal = meals.first else { return nil }
+            
+            let hoursSinceMeal = Date().timeIntervalSince(lastMeal.timestamp) / 3600
+            guard hoursSinceMeal >= 12 else { return nil } // 12+ hour fast
+            
+            // Check if HRV is trending up during fast
+            let fastingRange = lastMeal.timestamp...Date()
+            let fastingHRV = try await healthKitProvider.fetchHRVSamples(for: fastingRange)
+            
+            // Filter to awake samples only (6 AM - 10 PM) to avoid sleep confound
+            let calendar = Calendar.current
+            let awakeSamples = fastingHRV.filter { sample in
+                let hour = calendar.component(.hour, from: sample.timestamp)
+                return hour >= 6 && hour < 22
+            }
+            
+            guard awakeSamples.count >= 4 else { return nil }
+            
+            let sorted = awakeSamples.sorted { $0.timestamp < $1.timestamp }
+            let firstHalf = sorted.prefix(sorted.count / 2).map(\.sdnn)
+            let secondHalf = sorted.suffix(sorted.count / 2).map(\.sdnn)
+            
+            let firstAvg = firstHalf.reduce(0, +) / Double(firstHalf.count)
+            let secondAvg = secondHalf.reduce(0, +) / Double(secondHalf.count)
+            
+            let improvement = (secondAvg - firstAvg) / firstAvg
+            
+            if improvement > 0.1 { // >10% improvement
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .fastingBenefit,
+                    severity: 0.2, // Positive insight
+                    message: "Your \(Int(hoursSinceMeal))-hour fast is working! Daytime HRV improved \(Int(improvement * 100))% as digestion rested.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Fasting Benefit detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects when protein intake protected HRV during stressful period
+    /// Algorithm: High stress day (low avg HRV) + high protein = HRV didn't crash
+    func detectStressBuffer(in modelContext: ModelContext) async -> InsightEvent? {
+        let todayStart = Calendar.current.startOfDay(for: Date())
+        let todayRange = todayStart...Date()
+        
+        do {
+            // Get today's HRV
+            let todayHRV = try await healthKitProvider.fetchHRVSamples(for: todayRange)
+            guard !todayHRV.isEmpty else { return nil }
+            
+            let avgTodayHRV = todayHRV.map(\.sdnn).reduce(0, +) / Double(todayHRV.count)
+            
+            // Get baseline
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            guard let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) else { return nil }
+            
+            // Was today "stressful" (HRV 10-20% below baseline but not crashed)?
+            let hrvRatio = avgTodayHRV / baseline
+            guard hrvRatio >= 0.8 && hrvRatio < 0.9 else { return nil }
+            
+            // Check protein intake today
+            let mealPredicate = #Predicate<MealLog> { meal in
+                meal.timestamp >= todayStart
+            }
+            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
+            let totalProtein = meals.compactMap { $0.protein }.reduce(0, +)
+            
+            // High protein (>50g) during stress = buffered
+            if totalProtein > 50 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .stressBuffer,
+                    severity: 0.2, // Positive
+                    message: "You handled today's stress well! \(Int(totalProtein))g protein kept your HRV stable.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Stress Buffer detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects chronic low HRV that may indicate mineral deficiency
+    /// Algorithm: HRV flat/low for 2+ weeks despite good sleep
+    func detectMineralGap(in modelContext: ModelContext) async -> InsightEvent? {
+        let twoWeeksAgo = Date().addingTimeInterval(-14 * 24 * 3600)
+        let range = twoWeeksAgo...Date()
+        
+        do {
+            let hrvSamples = try await healthKitProvider.fetchHRVSamples(for: range)
+            guard hrvSamples.count >= 14 else { return nil } // Need at least 2 weeks of data
+            
+            // Group by day and calculate daily averages
+            let calendar = Calendar.current
+            let grouped = Dictionary(grouping: hrvSamples) { sample in
+                calendar.startOfDay(for: sample.timestamp)
+            }
+            
+            let dailyAverages = grouped.values.map { samples in
+                samples.map(\.sdnn).reduce(0, +) / Double(samples.count)
+            }.sorted()
+            
+            guard dailyAverages.count >= 10 else { return nil }
+            
+            // Check for low variance (flat HRV)
+            let minHRV = dailyAverages.min()!
+            let maxHRV = dailyAverages.max()!
+            let variance = maxHRV - minHRV
+            
+            // Also check if consistently low (<40ms average)
+            let overallAvg = dailyAverages.reduce(0, +) / Double(dailyAverages.count)
+            
+            // Low and flat = possible mineral gap
+            if variance < 10 && overallAvg < 40 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .mineralGap,
+                    severity: 0.6,
+                    message: "Your HRV has been flat for 2 weeks (\(Int(overallAvg))ms avg). Magnesium or Zinc might help.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Mineral Gap detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Predicts brain fog based on low morning HRV
+    /// Algorithm: Morning HRV significantly below baseline = tough focus day
+    func detectBrainFogForecast() async -> InsightEvent? {
+        do {
+            guard let morningHRV = try await healthKitProvider.fetchMorningHRV(for: Date()) else { return nil }
+            
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            guard let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) else { return nil }
+            
+            let deficit = (baseline - morningHRV) / baseline
+            
+            // >25% below baseline = brain fog risk
+            if deficit > 0.25 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .brainFogForecast,
+                    severity: min(deficit, 1.0),
+                    message: "Focus might be tricky today. HRV is \(Int(deficit * 100))% below normal. Tackle hard work early.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Brain Fog Forecast failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    /// Detects overnight HRV suppression from alcohol
+    /// Algorithm: Unusually low overnight HRV on nights with no late meals
+    func detectAlcoholImpact(in modelContext: ModelContext) async -> InsightEvent? {
+        // Check overnight HRV from last night
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        guard let lastNightStart = calendar.date(byAdding: .hour, value: -8, to: todayStart),
+              let lastNightEnd = calendar.date(byAdding: .hour, value: -1, to: todayStart) else { return nil }
+        
+        do {
+            let overnightHRV = try await healthKitProvider.fetchOvernightHRV(
+                sleepStart: lastNightStart,
+                sleepEnd: lastNightEnd
+            )
+            
+            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            guard let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange),
+                  let overnight = overnightHRV else { return nil }
+            
+            let suppression = (baseline - overnight) / baseline
+            
+            // Check if there was a late meal (could explain the dip via digestion debt)
+            let yesterdayStart = calendar.date(byAdding: .day, value: -1, to: todayStart)!
+            let mealPredicate = #Predicate<MealLog> { meal in
+                meal.timestamp >= yesterdayStart && meal.timestamp < todayStart
+            }
+            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
+            let hasLateMeal = meals.contains { meal in
+                let hour = calendar.component(.hour, from: meal.timestamp)
+                return hour >= 20
+            }
+            
+            // >35% suppression WITHOUT late meal = likely alcohol (raised from 30% to reduce false positives)
+            if suppression > 0.35 && !hasLateMeal {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .alcoholImpact,
+                    severity: min(suppression, 1.0),
+                    message: "Overnight HRV was \(Int(suppression * 100))% below normal. If you drank last night, that's likely why. (Illness or travel could also cause this.)",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Alcohol Impact detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    // MARK: - Integration: Scheduled Checks
+    
+    /// Run morning insight checks (call from app launch)
+    func runMorningChecks(in modelContext: ModelContext) async -> [InsightEvent] {
+        var insights: [InsightEvent] = []
+        
+        // Morning Readiness
+        if let readiness = await detectMorningReadiness() {
+            insights.append(readiness)
+            modelContext.insert(readiness)
+        }
+        
+        // Brain Fog Forecast (if HRV is significantly below baseline)
+        if let brainFog = await detectBrainFogForecast() {
+            insights.append(brainFog)
+            modelContext.insert(brainFog)
+        }
+        
+        // Alcohol Impact (if overnight HRV was suppressed)
+        if let alcohol = await detectAlcoholImpact(in: modelContext) {
+            insights.append(alcohol)
+            modelContext.insert(alcohol)
+        }
+        
+        // Fasting Benefit (if applicable)
+        if let fasting = await detectFastingBenefit(in: modelContext) {
+            insights.append(fasting)
+            modelContext.insert(fasting)
+        }
+        
+        // Stress Buffer (end of day check - can also run in evening)
+        if let stress = await detectStressBuffer(in: modelContext) {
+            insights.append(stress)
+            modelContext.insert(stress)
+        }
+        
+        return insights
+    }
+    
+    /// Run weekly chronic checks (call on Sunday morning)
+    func runWeeklyChecks(in modelContext: ModelContext) async -> [InsightEvent] {
+        var insights: [InsightEvent] = []
+        
+        if let deepSleepRobber = await detectDeepSleepRobber(in: modelContext) {
+            insights.append(deepSleepRobber)
+            modelContext.insert(deepSleepRobber)
+        }
+        
+        if let mineralGap = await detectMineralGap(in: modelContext) {
+            insights.append(mineralGap)
+            modelContext.insert(mineralGap)
+        }
+        
+        return insights
     }
 }
