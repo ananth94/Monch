@@ -33,6 +33,7 @@ struct TimelineView: View {
     @State private var selectedVibe: VibeCheck?
     @State private var selectedDate: Date = Date()
     @State private var showingDatePicker = false
+    @State private var scrollOffset: CGFloat = 0
     
     var body: some View {
         NavigationStack {
@@ -57,11 +58,12 @@ struct TimelineView: View {
                     // Timeline Content
                     GeometryReader { geometry in
                         ZStack {
-                            // River background
+                            // River background with parallax
                             RiverSplineView(
                                 itemCount: timelineItems.count,
                                 mood: insightEngine.currentMood,
-                                geometry: geometry
+                                geometry: geometry,
+                                scrollOffset: scrollOffset
                             )
                             
                             // Timeline items
@@ -238,6 +240,15 @@ struct TimelineView: View {
     private var timelineList: some View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                // Scroll position tracker
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: ScrollOffsetPreferenceKey.self,
+                        value: geo.frame(in: .named("scroll")).minY
+                    )
+                }
+                .frame(height: 0)
+                
                 ForEach(groupedByDay, id: \.key) { day, items in
                     Section {
                         ForEach(Array(items.sorted(by: { $0.timestamp > $1.timestamp }).enumerated()), id: \.element.id) { index, item in
@@ -261,6 +272,10 @@ struct TimelineView: View {
                 }
             }
             .padding(.bottom, 100) // Space for tab bar
+        }
+        .coordinateSpace(name: "scroll")
+        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+            scrollOffset = value
         }
     }
     
@@ -820,4 +835,13 @@ struct DatePickerSheet: View {
 #Preview {
     TimelineView()
         .modelContainer(for: [MealLog.self, InsightEvent.self, WorkoutLog.self, SleepLog.self, VibeCheck.self], inMemory: true)
+}
+
+// MARK: - Scroll Offset Preference Key
+
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }

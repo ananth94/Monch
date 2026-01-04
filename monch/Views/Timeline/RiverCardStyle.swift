@@ -95,17 +95,17 @@ struct RiverCardStyleModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
+            // Apply background FIRST, before clipping
+            .background(cardBackgroundColor)
             .clipShape(cornerShape)
-            .background(
-                cornerShape
-                    .fill(cardBackgroundColor)
-            )
             // Dual watercolor bleeding shadows per spec
-            .shadow(color: Color.Monch.sage.opacity(0.15), radius: 16, x: 0, y: 8)
-            .shadow(color: Color.Monch.periwinkle.opacity(0.1), radius: 24, x: 0, y: 12)
+            .shadow(color: Color.Monch.sage.opacity(0.2), radius: 16, x: 0, y: 8)
+            .shadow(color: Color.Monch.periwinkle.opacity(0.15), radius: 24, x: 0, y: 12)
             // Alternating position and rotation
             .offset(x: horizontalOffset)
             .rotationEffect(rotation)
+            // Ripple effect overlay
+            .riverRipple()
     }
     
     private var cardBackgroundColor: Color {

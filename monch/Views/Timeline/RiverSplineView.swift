@@ -46,7 +46,7 @@ struct RiverSplineView: View {
             // Watercolor texture overlay
             Image("river_texture")
                 .resizable(resizingMode: .tile)
-                .opacity(0.08)
+                .opacity(0.12)
                 .blendMode(.overlay)
                 .allowsHitTesting(false)
             
@@ -362,11 +362,11 @@ struct RiverSplineView: View {
             // Normalized: 0-0.27 fade in, 0.27-0.73 hold, 0.73-1.0 fade out
             let opacity: Double
             if sparklePhase < 0.27 {
-                opacity = Double(sparklePhase / 0.27) * 0.5
+                opacity = Double(sparklePhase / 0.27) * 0.8
             } else if sparklePhase < 0.73 {
-                opacity = 0.5
+                opacity = 0.8
             } else {
-                opacity = Double(1.0 - (sparklePhase - 0.73) / 0.27) * 0.5
+                opacity = Double(1.0 - (sparklePhase - 0.73) / 0.27) * 0.8
             }
             
             guard opacity > 0.05 else { continue }
