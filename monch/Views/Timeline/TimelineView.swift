@@ -13,6 +13,7 @@ struct TimelineView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MealLog.timestamp, order: .reverse) private var meals: [MealLog]
     @Query(sort: \InsightEvent.timestamp, order: .reverse) private var insights: [InsightEvent]
+    @ObservedObject private var healthKit = HealthKitManager.shared
     
     @State private var showingMascotDetail = false
     @State private var showingFoodLogger = false
@@ -26,6 +27,11 @@ struct TimelineView: View {
                     .opacity(0.3)
                 
                 VStack(spacing: 0) {
+                    // HealthKit Access Banner (if denied)
+                    if !healthKit.isAuthorized {
+                        healthKitBanner
+                    }
+                    
                     // Mascot Header - tappable to expand
                     MascotHeader(mood: currentMood) {
                         showingMascotDetail = true
@@ -104,6 +110,42 @@ struct TimelineView: View {
             calendar.startOfDay(for: item.timestamp)
         }
         return grouped.sorted { $0.key > $1.key }
+    }
+    
+    // MARK: - HealthKit Banner
+    
+    private var healthKitBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "heart.text.square")
+                .font(.title2)
+                .foregroundStyle(Color.Monch.coral)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Health Access Required")
+                    .font(.Monch.headline)
+                Text("Enable to correlate meals with heart rate")
+                    .font(.Monch.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            Button("Enable") {
+                healthKit.openHealthSettings()
+            }
+            .font(.Monch.caption)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.Monch.coral))
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.Monch.coral.opacity(0.1))
+        )
+        .padding(.horizontal)
+        .padding(.top, 8)
     }
 }
 

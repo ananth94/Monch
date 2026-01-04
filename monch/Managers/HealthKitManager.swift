@@ -8,6 +8,7 @@
 import Foundation
 import HealthKit
 import Combine
+import UIKit
 
 /// Thread-safe manager for HealthKit data access.
 /// Handles authorization and provides convenience methods for fetching health metrics.
@@ -58,11 +59,34 @@ class HealthKitManager: ObservableObject {
         
         do {
             try await healthStore.requestAuthorization(toShare: [], read: requiredReadTypes)
-            self.isAuthorized = true
+            await checkAuthorizationStatus()
             print("HealthKit authorization request complete.")
         } catch {
             self.authorizationError = error
             print("HealthKit authorization failed: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Check if we have authorization for at least heart rate data
+    func checkAuthorizationStatus() async {
+        let heartRateType = HKQuantityType(.heartRate)
+        let status = healthStore.authorizationStatus(for: heartRateType)
+        
+        switch status {
+        case .sharingAuthorized:
+            isAuthorized = true
+        case .sharingDenied, .notDetermined:
+            isAuthorized = false
+        @unknown default:
+            isAuthorized = false
+        }
+    }
+    
+    /// Open the Health app settings for this app (user must manually re-enable)
+    func openHealthSettings() {
+        guard let url = URL(string: "x-apple-health://") else { return }
+        if UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
         }
     }
     
