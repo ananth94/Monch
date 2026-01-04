@@ -1,0 +1,5 @@
+{
+  "artifactType":  "ARTIFACT_TYPE_IMPLEMENTATION_PLAN",
+  "summary":  "Implementation plan for P0 mascot components: MonchAvatar animation system, MonchView (expanded sheet), and EmptyStateView. Includes instructions for creating new files and updating existing views.",
+  "updatedAt":  "2026-01-03T22:37:25.377474Z"
+}

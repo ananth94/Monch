@@ -1,0 +1,75 @@
+# Timeline Entry Cards UX
+
+## Principle
+**Tap any entry on the Timeline → Opens a detail card specific to that entry type.**
+
+All cards share a consistent shell but display type-specific content.
+
+---
+
+## Entry Types
+
+| Type | Icon | Primary Data | Detail Card |
+|------|------|--------------|-------------|
+| **Food** | 🍽️ | Meal name, calories | FoodCard |
+| **Sleep** | 😴 | Duration, quality | SleepCard |
+| **Exercise** | 🏃 | Activity, duration, HR | ExerciseCard |
+| **Insight** | 💡 | Insight title, severity | InsightCard |
+
+---
+
+## Shared Card Shell
+
+```
+┌─────────────────────────────────────┐
+│  ← Back                      [Action]│
+├─────────────────────────────────────┤
+│   [Icon] [Entry Title]              │
+│   [Timestamp / Context]             │
+├─────────────────────────────────────┤
+│                                     │
+│   [TYPE-SPECIFIC CONTENT]           │
+│                                     │
+├─────────────────────────────────────┤
+│  [ Delete Entry ]                   │
+└─────────────────────────────────────┘
+```
+
+---
+
+## Card Variants
+
+### 🍽️ FoodCard
+- Serving size control (g, ml, cups)
+- Macros: Calories, Carbs (Fiber/Sugar), Protein, Fat
+- Micros: Caffeine, Magnesium, Zinc, Sodium, Iron
+- Context tags: 🍞 High Carb, 💪 High Protein, 🧈 High Fat
+
+### 😴 SleepCard
+- Duration bar (hours/mins)
+- Quality score (if available from HealthKit)
+- Stages breakdown: Deep, REM, Light, Awake
+- Context: "Kitchen closing" / "Late meal impact"
+
+### 🏃 ExerciseCard  
+- Activity type (Walk, Run, Strength, etc.)
+- Duration / Distance
+- Heart Rate: Avg, Max, Zones
+- Calories burned
+- Context tags: 💪 Anabolic Window, ⚡ Zone 2
+
+### 💡 InsightCard
+- Insight type icon & color
+- Severity indicator
+- Explanation copy (the "Cozy Science" text)
+- Linked entries (e.g., "Caused by: 9PM Dinner")
+- Quick actions based on insight type
+
+---
+
+## Interaction Pattern
+
+1. **Timeline shows bubbles** for each entry type
+2. **Tap bubble** → Slide-up sheet with appropriate card
+3. **Edit/View** → Same card, pre-filled
+4. **Save/Dismiss** → Returns to Timeline

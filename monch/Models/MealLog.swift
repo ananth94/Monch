@@ -46,6 +46,12 @@ final class MealLog {
     /// Zinc (mg) — for Mineral Gap insight
     var zinc: Double?
     
+    /// Sodium (mg) — for Cardiovascular / Hydration context
+    var sodium: Double?
+    
+    /// Iron (mg) — for Energy / Blood Health context
+    var iron: Double?
+    
     // MARK: - Context
     
     /// Tags computed by ContextEngine: "refeed", "late_night", "caffeine", "high_sugar"
@@ -65,6 +71,8 @@ final class MealLog {
         caffeine: Double? = nil,
         magnesium: Double? = nil,
         zinc: Double? = nil,
+        sodium: Double? = nil,
+        iron: Double? = nil,
         tags: [String] = []
     ) {
         self.id = UUID()
@@ -79,6 +87,8 @@ final class MealLog {
         self.caffeine = caffeine
         self.magnesium = magnesium
         self.zinc = zinc
+        self.sodium = sodium
+        self.iron = iron
         self.contextTags = tags
     }
 }

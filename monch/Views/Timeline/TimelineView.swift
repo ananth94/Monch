@@ -18,6 +18,7 @@ struct TimelineView: View {
     
     @State private var showingMascotDetail = false
     @State private var showingFoodLogger = false
+    @State private var selectedMeal: MealLog?
     
     var body: some View {
         NavigationStack {
@@ -80,6 +81,12 @@ struct TimelineView: View {
             .onChange(of: meals.count) { _, _ in
                 insightEngine.refreshMood(meals: meals, insights: insights)
             }
+            .sheet(item: $selectedMeal) { meal in
+                FoodCardView(meal: meal) {
+                    modelContext.delete(meal)
+                    selectedMeal = nil
+                }
+            }
         }
     }
     
@@ -91,9 +98,11 @@ struct TimelineView: View {
                 ForEach(groupedByDay, id: \.key) { day, items in
                     Section {
                         ForEach(items.sorted(by: { $0.timestamp > $1.timestamp })) { item in
-                            TimelineItemRow(item: item)
-                                .padding(.horizontal)
-                                .padding(.vertical, 6)
+                            TimelineItemRow(item: item) { meal in
+                                selectedMeal = meal
+                            }
+                            .padding(.horizontal)
+                            .padding(.vertical, 6)
                         }
                     } header: {
                         DayHeader(date: day)
@@ -184,11 +193,15 @@ enum TimelineItem: Identifiable {
 
 struct TimelineItemRow: View {
     let item: TimelineItem
+    var onMealTap: ((MealLog) -> Void)?
     
     var body: some View {
         switch item {
         case .meal(let meal):
             MealCard(meal: meal)
+                .onTapGesture {
+                    onMealTap?(meal)
+                }
         case .insight(let insight):
             InsightCardPlaceholder(insight: insight)
         }
@@ -235,12 +248,18 @@ struct MealCard: View {
             }
             
             Spacer()
+            
+            // Tap indicator
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(.ultraThinMaterial)
         )
+        .contentShape(Rectangle())
     }
 }
 

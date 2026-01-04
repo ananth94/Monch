@@ -1,0 +1,125 @@
+# Food Card UX Design
+
+## Purpose
+A detailed view for a single food item that gives users **granular control** over quantity and displays **macro/micronutrient** data for that entry.
+
+---
+
+## When to Show
+
+| Context | Trigger |
+|---------|---------|
+| **Adding Food** | User taps "Add Food" and selects an item from search/database. |
+| **Editing Entry** | User taps an existing meal bubble on the Timeline. |
+| **Quick Log Refinement** | After a barcode scan or AI recognition, user refines details. |
+
+---
+
+## Layout Concept
+
+```
+┌─────────────────────────────────────┐
+│  ← Back                      Save ✓ │
+├─────────────────────────────────────┤
+│                                     │
+│   🍞 Oatmeal with Banana            │  ← Food Name (editable)
+│   "Breakfast • 8:32am"              │  ← Context / Time
+│                                     │
+├─────────────────────────────────────┤
+│                                     │
+│   Serving Size                      │
+│   ┌─────────┐  ┌─────────────────┐  │
+│   │  1.5    │  │  cup (240ml) ▼  │  │  ← Numeric + Unit Picker
+│   └─────────┘  └─────────────────┘  │
+│                                     │
+│   Quick Presets:                    │
+│   [ ½ ] [ 1 ] [ 1.5 ] [ 2 ] [custom]│  ← Tap to set serving multiplier
+│                                     │
+├─────────────────────────────────────┤
+│                                     │
+│   📊 MACROS (per serving)           │
+│   ┌─────────────────────────────┐   │
+│   │  Calories     │    350 kcal │   │
+│   │  Carbs        │      52g    │   │
+│   │  Protein      │      12g    │   │
+│   │  Fat          │       8g    │   │
+│   │  Fiber        │       6g    │   │
+│   │  Sugar        │      18g    │   │
+│   └─────────────────────────────┘   │
+│                                     │
+│   ▼ Show Micronutrients             │  ← Expandable section
+│                                     │
+├─────────────────────────────────────┤
+│                                     │
+│   🧪 MICROS (expanded)              │
+│   ┌─────────────────────────────┐   │
+│   │  Caffeine     │       0mg   │   │
+│   │  Magnesium    │      48mg   │   │
+│   │  Zinc         │     1.2mg   │   │
+│   └─────────────────────────────┘   │
+│                                     │
+├─────────────────────────────────────┤
+│                                     │
+│  [ Delete Entry ]                   │  ← Destructive action (red)
+│                                     │
+└─────────────────────────────────────┘
+```
+
+---
+
+## Components
+
+### 1. Serving Size Control
+*   **Numeric Input:** A focused `TextField` with `.decimalPad` keyboard for precise values (e.g., 1.5, 0.75).
+*   **Unit Picker:** A dropdown/picker for units:
+    *   Grams (g)
+    *   Millilitres (ml)
+    *   Cups
+    *   Pieces / Servings
+    *   Tablespoons (tbsp)
+*   **Quick Presets:** Tap-to-set buttons for common multipliers. Updates numeric input and recalculates nutrients.
+
+### 2. Macro/Micro Display
+*   **Macros:** Always visible in a styled card. Values update in real-time as serving size changes.
+*   **Micros:** Hidden by default behind a disclosure chevron to reduce clutter. Expands inline.
+*   **Visual Emphasis:**
+    *   **Calories** in `largeTitle` style.
+    *   **Macros** in `headline` with colored accents (Carbs = Coral, Protein = Sage, Fat = Periwinkle).
+    *   **Micros** in `subheadline` with muted tones.
+
+### 3. Context Tag (Automatic)
+The card can show a small "bubble" tag if the entry matches a context:
+*   🔥 **High Carb** (carbs > 30g)
+*   💪 **High Protein** (protein > 35g)
+*   ☕ **Caffeine** (caffeine > 50mg)
+
+---
+
+## Interaction Flow
+
+1.  **User selects food** from search or scan.
+2.  **Food Card appears** as a sheet (`.sheet` or `.fullScreenCover`).
+3.  **Default:** 1 serving is pre-filled. Macros displayed.
+4.  **User adjusts:** Taps preset or types custom amount. Nutrients recalculate live.
+5.  **User saves:** Card dismisses, entry added to Timeline.
+
+---
+
+## Design System Alignment
+
+| Element | Token |
+|---------|-------|
+| Card Background | `Color.Monch.cream` (light) / `Color.Monch.warmCharcoal` (dark) |
+| Card Corner Radius | `CornerRadius.xl` (24pt) |
+| Section Padding | `Spacing.md` (16pt) |
+| Macro Value Font | `MonchFont.headline` |
+| Calorie Value Font | `MonchFont.largeTitle` |
+| Micro Value Font | `MonchFont.subheadline` |
+
+---
+
+## Open Questions
+
+1.  **Data Source:** Where do nutrient values come from? (Local database, API like USDA/OpenFoodFacts, or manual entry?)
+2.  **Barcode Integration:** Should scanning pre-fill the card directly?
+3.  **Favorites/Recent:** Should there be a "Save as Favorite" action on this card?
