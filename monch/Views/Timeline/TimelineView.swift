@@ -395,6 +395,7 @@ struct MealCard: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 32, height: 32)
+                .accessibilityLabel("Meal")
             
             // Time
             Text(meal.timestamp, format: .dateTime.hour().minute())
@@ -481,6 +482,7 @@ struct InsightTimelineCard: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 32, height: 32)
+                .accessibilityLabel(insight.type.displayTitle)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(insight.type.displayTitle)
@@ -525,8 +527,10 @@ struct InsightTimelineCard: View {
             return Image("insight_spike_kawaii")
         case .muscleSponge, .goodSpike, .zone2Drain:
             return Image("insight_recovery_kawaii")
-        default:
-            return Image("insight_spike_kawaii")
+        case .caffeineJitter:
+            return Image("coffee_kawaii")
+        case .digestionDebt, .deepSleepRobber:
+            return Image("sleep_kawaii")
         }
     }
 }
@@ -543,6 +547,7 @@ struct WorkoutTimelineCard: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 32, height: 32)
+                .accessibilityLabel("Workout")
             
             // Time
             Text(workout.startTime, format: .dateTime.hour().minute())
@@ -620,6 +625,7 @@ struct SleepTimelineCard: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 32, height: 32)
+                .accessibilityLabel("Sleep")
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
