@@ -37,6 +37,9 @@ struct SleepCardView: View {
                 if let insight = linkedInsight {
                     contextSection(insight: insight)
                 }
+                
+                // Scoring formula explanation
+                formulaExplanationSection
             }
         }
     }
@@ -45,10 +48,14 @@ struct SleepCardView: View {
     
     private var qualityTag: String? {
         let score = sleepLog.computedQualityScore
-        if score >= 0.8 { return "✨ Great" }
-        if score >= 0.6 { return "👍 Good" }
-        if score >= 0.4 { return "😐 Fair" }
-        return "😴 Poor"
+        let efficiency = Int(sleepLog.sleepEfficiency * 100)
+        let status: String
+        if score >= 0.8 { status = "✨ Great" }
+        else if score >= 0.6 { status = "👍 Good" }
+        else if score >= 0.4 { status = "😐 Fair" }
+        else { status = "😴 Poor" }
+        
+        return "\(status) • \(efficiency)% Eff."
     }
     
     // MARK: - Summary Section
@@ -159,6 +166,38 @@ struct SleepCardView: View {
             Text(insight)
                 .font(.Monch.body)
                 .foregroundStyle(.secondary)
+        }
+    }
+    
+    // MARK: - Scoring Explanation
+    
+    private var formulaExplanationSection: some View {
+        MonchCardSection("how we score", icon: "info.circle") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Your Sleep Quality is a weighted average of three key pillars:")
+                    .font(.Monch.caption)
+                    .foregroundStyle(.secondary)
+                
+                ScoreRuleRow(label: "Sleep Efficiency (>85%)", weight: 35)
+                ScoreRuleRow(label: "Deep Sleep (15–25%)", weight: 35)
+                ScoreRuleRow(label: "Total Duration (7–9 hrs)", weight: 30)
+            }
+        }
+    }
+    
+    private struct ScoreRuleRow: View {
+        let label: String
+        let weight: Int
+        
+        var body: some View {
+            HStack {
+                Text(label)
+                    .font(.Monch.caption2)
+                Spacer()
+                Text("\(weight)% weight")
+                    .font(.Monch.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
     
