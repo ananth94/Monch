@@ -203,22 +203,27 @@ extension HealthKitManager: HealthKitDataProvider {
         return samples.map { HRVSample(from: $0) }
     }
     
-    nonisolated func fetchBaselineHRV(for range: ClosedRange<Date>) async throws -> Double? {
-        let samples = try await fetchHRVSamples(for: range)
+    /// Helper to compute average SDNN from samples
+    private nonisolated func computeAverageSDNN(_ samples: [HRVSample]) -> Double? {
         guard !samples.isEmpty else { return nil }
         return samples.map(\.sdnn).reduce(0, +) / Double(samples.count)
     }
     
+    nonisolated func fetchBaselineHRV(for range: ClosedRange<Date>) async throws -> Double? {
+        let samples = try await fetchHRVSamples(for: range)
+        return computeAverageSDNN(samples)
+    }
+    
     nonisolated func fetchOvernightHRV(sleepStart: Date, sleepEnd: Date) async throws -> Double? {
         let samples = try await fetchHRVSamples(for: sleepStart...sleepEnd)
-        guard !samples.isEmpty else { return nil }
-        return samples.map(\.sdnn).reduce(0, +) / Double(samples.count)
+        return computeAverageSDNN(samples)
     }
     
     nonisolated func fetchMorningHRV(for date: Date) async throws -> Double? {
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: date)
-        let morningEnd = calendar.date(byAdding: .hour, value: 10, to: dayStart)!  // First 10 hours
+        // TODO: Improve by using actual wake time from sleep data
+        let morningEnd = calendar.date(byAdding: .hour, value: 10, to: dayStart)!
         
         let samples = try await fetchHRVSamples(for: dayStart...morningEnd)
         

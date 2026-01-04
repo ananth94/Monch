@@ -786,7 +786,7 @@ class InsightEngine: ObservableObject {
     }
     
     /// Detects HRV improvement during fasting window
-    /// Algorithm: HRV trend during 12+ hour fast
+    /// Algorithm: HRV trend during 12+ hour fast (awake samples only)
     func detectFastingBenefit(in modelContext: ModelContext) async -> InsightEvent? {
         // Get most recent meal
         let mealDescriptor = FetchDescriptor<MealLog>(
@@ -804,9 +804,16 @@ class InsightEngine: ObservableObject {
             let fastingRange = lastMeal.timestamp...Date()
             let fastingHRV = try await healthKitProvider.fetchHRVSamples(for: fastingRange)
             
-            guard fastingHRV.count >= 4 else { return nil }
+            // Filter to awake samples only (6 AM - 10 PM) to avoid sleep confound
+            let calendar = Calendar.current
+            let awakeSamples = fastingHRV.filter { sample in
+                let hour = calendar.component(.hour, from: sample.timestamp)
+                return hour >= 6 && hour < 22
+            }
             
-            let sorted = fastingHRV.sorted { $0.timestamp < $1.timestamp }
+            guard awakeSamples.count >= 4 else { return nil }
+            
+            let sorted = awakeSamples.sorted { $0.timestamp < $1.timestamp }
             let firstHalf = sorted.prefix(sorted.count / 2).map(\.sdnn)
             let secondHalf = sorted.suffix(sorted.count / 2).map(\.sdnn)
             
@@ -820,7 +827,7 @@ class InsightEngine: ObservableObject {
                     timestamp: Date(),
                     type: .fastingBenefit,
                     severity: 0.2, // Positive insight
-                    message: "Your \(Int(hoursSinceMeal))-hour fast is working! HRV improved \(Int(improvement * 100))% as digestion rested.",
+                    message: "Your \(Int(hoursSinceMeal))-hour fast is working! Daytime HRV improved \(Int(improvement * 100))% as digestion rested.",
                     associatedMealID: nil
                 )
             }
@@ -983,13 +990,13 @@ class InsightEngine: ObservableObject {
                 return hour >= 20
             }
             
-            // >30% suppression WITHOUT late meal = likely alcohol
-            if suppression > 0.3 && !hasLateMeal {
+            // >35% suppression WITHOUT late meal = likely alcohol (raised from 30% to reduce false positives)
+            if suppression > 0.35 && !hasLateMeal {
                 return InsightEvent(
                     timestamp: Date(),
                     type: .alcoholImpact,
                     severity: min(suppression, 1.0),
-                    message: "Last night's drinks took a toll. Overnight HRV was \(Int(suppression * 100))% below normal.",
+                    message: "Overnight HRV was \(Int(suppression * 100))% below normal. If you drank last night, that's likely why. (Illness or travel could also cause this.)",
                     associatedMealID: nil
                 )
             }
