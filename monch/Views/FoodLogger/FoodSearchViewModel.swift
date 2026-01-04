@@ -16,7 +16,7 @@ class FoodSearchViewModel: ObservableObject {
     @Published var results: [FoodItem] = []
     @Published var isSearching = false
     @Published var error: Error?
-    @Published var cart: [FoodItem] = []
+    @Published var cart: [CartItem] = []
     
     // MARK: - Private
     
@@ -92,18 +92,39 @@ class FoodSearchViewModel: ObservableObject {
     // MARK: - Cart Management
     
     func addToCart(_ item: FoodItem) {
-        cart.append(item)
+        // Check if item already in cart - increase quantity instead
+        if let index = cart.firstIndex(where: { $0.foodItem.id == item.id }) {
+            cart[index].quantity += 1
+        } else {
+            cart.append(CartItem(foodItem: item))
+        }
     }
     
-    func removeFromCart(_ item: FoodItem) {
+    func removeFromCart(_ item: CartItem) {
         cart.removeAll { $0.id == item.id }
     }
     
+    func incrementQuantity(for item: CartItem) {
+        if let index = cart.firstIndex(where: { $0.id == item.id }) {
+            cart[index].quantity += 1
+        }
+    }
+    
+    func decrementQuantity(for item: CartItem) {
+        if let index = cart.firstIndex(where: { $0.id == item.id }) {
+            if cart[index].quantity > 1 {
+                cart[index].quantity -= 1
+            } else {
+                cart.remove(at: index)
+            }
+        }
+    }
+    
     var totalMacroSummary: String {
-        let totalCal = cart.compactMap(\.calories).reduce(0, +)
-        let totalCarbs = cart.compactMap(\.carbs).reduce(0, +)
-        let totalProtein = cart.compactMap(\.protein).reduce(0, +)
-        let totalFat = cart.compactMap(\.fat).reduce(0, +)
+        let totalCal = cart.compactMap(\.scaledCalories).reduce(0, +)
+        let totalCarbs = cart.compactMap(\.scaledCarbs).reduce(0, +)
+        let totalProtein = cart.compactMap(\.scaledProtein).reduce(0, +)
+        let totalFat = cart.compactMap(\.scaledFat).reduce(0, +)
         
         return "\(Int(totalCal)) kcal • \(Int(totalCarbs))g C • \(Int(totalProtein))g P • \(Int(totalFat))g F"
     }
@@ -113,18 +134,18 @@ class FoodSearchViewModel: ObservableObject {
     func createMealLog() -> MealLog? {
         guard !cart.isEmpty else { return nil }
         
-        // Aggregate nutritional data
-        let name = cart.count == 1 
+        // Aggregate nutritional data (using scaled values)
+        let name = cart.count == 1 && cart.first!.quantity == 1
             ? cart.first!.name 
-            : "\(cart.first!.name) + \(cart.count - 1) more"
+            : cart.map { $0.quantity > 1 ? "\($0.quantity)x \($0.name)" : $0.name }.joined(separator: ", ")
         
-        let totalCalories = cart.compactMap(\.calories).reduce(0, +)
-        let totalCarbs = cart.compactMap(\.carbs).reduce(0, +)
-        let totalProtein = cart.compactMap(\.protein).reduce(0, +)
-        let totalFat = cart.compactMap(\.fat).reduce(0, +)
-        let totalFiber = cart.compactMap(\.fiber).reduce(0, +)
-        let totalSugar = cart.compactMap(\.sugar).reduce(0, +)
-        let totalCaffeine = cart.compactMap(\.caffeine).reduce(0, +)
+        let totalCalories = cart.compactMap(\.scaledCalories).reduce(0, +)
+        let totalCarbs = cart.compactMap(\.scaledCarbs).reduce(0, +)
+        let totalProtein = cart.compactMap(\.scaledProtein).reduce(0, +)
+        let totalFat = cart.compactMap(\.scaledFat).reduce(0, +)
+        let totalFiber = cart.compactMap(\.scaledFiber).reduce(0, +)
+        let totalSugar = cart.compactMap(\.scaledSugar).reduce(0, +)
+        let totalCaffeine = cart.compactMap(\.scaledCaffeine).reduce(0, +)
         
         return MealLog(
             name: name,

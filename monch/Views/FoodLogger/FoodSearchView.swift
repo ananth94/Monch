@@ -20,14 +20,13 @@ struct FoodSearchView: View {
                 // Search Bar
                 searchBar
                 
-                // Content
-                if viewModel.cart.isEmpty {
-                    // Search Results
-                    searchResults
-                } else {
-                    // Cart View
-                    cartView
+                // Cart summary (if items exist)
+                if !viewModel.cart.isEmpty {
+                    cartSummaryBar
                 }
+                
+                // Search Results (always visible)
+                searchResults
             }
             .navigationTitle("Log Meal")
             .navigationBarTitleDisplayMode(.inline)
@@ -204,50 +203,56 @@ struct FoodSearchView: View {
         }
     }
     
-    // MARK: - Cart View
+    // MARK: - Cart Summary Bar
     
-    private var cartView: some View {
+    @State private var isCartExpanded = false
+    
+    private var cartSummaryBar: some View {
         VStack(spacing: 0) {
-            // Cart Items
-            List {
-                Section {
-                    ForEach(viewModel.cart) { item in
-                        CartItemRow(item: item) {
-                            viewModel.removeFromCart(item)
-                        }
-                    }
-                } header: {
-                    Text("Your Meal")
-                }
-                
-                // Totals
-                Section {
-                    HStack {
-                        Text("Total")
-                            .font(.Monch.headline)
-                        Spacer()
-                        Text(viewModel.totalMacroSummary)
-                            .font(.Monch.body)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            
-            // Add More Button
+            // Expandable header
             Button {
-                // Clear search to show quick add again
-                viewModel.searchQuery = ""
+                withAnimation(.spring(response: 0.3)) {
+                    isCartExpanded.toggle()
+                }
             } label: {
                 HStack {
-                    Image(systemName: "plus.circle")
-                    Text("Add More Items")
+                    Image(systemName: "cart.fill")
+                        .foregroundStyle(Color.Monch.sage)
+                    
+                    Text("\(viewModel.cart.count) item\(viewModel.cart.count == 1 ? "" : "s")")
+                        .font(.Monch.headline)
+                    
+                    Text("• \(viewModel.totalMacroSummary)")
+                        .font(.Monch.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Image(systemName: isCartExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
                 }
-                .font(.Monch.headline)
-                .foregroundStyle(Color.Monch.sage)
-                .frame(maxWidth: .infinity)
                 .padding()
                 .background(Color.Monch.sage.opacity(0.1))
+            }
+            .buttonStyle(.plain)
+            
+            // Expanded cart items
+            if isCartExpanded {
+                VStack(spacing: 0) {
+                    ForEach(viewModel.cart) { item in
+                        CartItemRow(
+                            item: item,
+                            onIncrement: { viewModel.incrementQuantity(for: item) },
+                            onDecrement: { viewModel.decrementQuantity(for: item) }
+                        )
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        
+                        Divider()
+                    }
+                }
+                .background(Color.primary.opacity(0.02))
             }
         }
     }
@@ -313,8 +318,9 @@ struct FoodItemRow: View {
 // MARK: - Cart Item Row
 
 struct CartItemRow: View {
-    let item: FoodItem
-    let onRemove: () -> Void
+    let item: CartItem
+    let onIncrement: () -> Void
+    let onDecrement: () -> Void
     
     var body: some View {
         HStack {
@@ -322,16 +328,32 @@ struct CartItemRow: View {
                 Text(item.name)
                     .font(.Monch.body)
                 
-                Text(item.macroSummary)
-                    .font(.Monch.caption)
-                    .foregroundStyle(.secondary)
+                if let cal = item.scaledCalories {
+                    Text("\(Int(cal)) kcal")
+                        .font(.Monch.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             
             Spacer()
             
-            Button(action: onRemove) {
-                Image(systemName: "minus.circle.fill")
-                    .foregroundStyle(.red)
+            // Quantity Stepper
+            HStack(spacing: 12) {
+                Button(action: onDecrement) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(item.quantity == 1 ? .red : Color.Monch.sage)
+                }
+                
+                Text("\(item.quantity)")
+                    .font(.Monch.headline)
+                    .frame(minWidth: 24)
+                
+                Button(action: onIncrement) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.Monch.sage)
+                }
             }
         }
     }
