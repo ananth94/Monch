@@ -27,12 +27,65 @@ struct SleepSample: Sendable {
     let stage: SleepStage
 }
 
-enum SleepStage: Sendable {
-    case inBed
-    case asleepCore
-    case asleepDeep
-    case asleepREM
-    case awake
+/// Sleep stage types matching HealthKit's HKCategoryValueSleepAnalysis
+enum SleepStage: String, Codable, CaseIterable, Sendable {
+    case awake = "awake"
+    case light = "light"      // asleepCore in HealthKit
+    case rem = "rem"          // asleepREM in HealthKit
+    case deep = "deep"        // asleepDeep in HealthKit
+    case inBed = "inBed"      // inBed (not asleep)
+    
+    /// Display name for UI
+    var displayName: String {
+        switch self {
+        case .awake: return "Awake"
+        case .light: return "Light"
+        case .rem: return "REM"
+        case .deep: return "Deep"
+        case .inBed: return "In Bed"
+        }
+    }
+    
+    /// Color association for charts (uses design system indirectly)
+    var colorName: String {
+        switch self {
+        case .awake: return "coral"
+        case .light: return "lavender"
+        case .rem: return "periwinkle"
+        case .deep: return "midnightNavy"
+        case .inBed: return "cream"
+        }
+    }
+    
+    /// Y-axis position for hypnogram (0 = awake, 3 = deep)
+    var depthValue: Int {
+        switch self {
+        case .awake: return 0
+        case .inBed: return 0
+        case .light: return 1
+        case .rem: return 2
+        case .deep: return 3
+        }
+    }
+    
+    /// Initialize from HealthKit category value
+    init(fromHealthKit value: Int) {
+        switch value {
+        case HKCategoryValueSleepAnalysis.asleepDeep.rawValue:
+            self = .deep
+        case HKCategoryValueSleepAnalysis.asleepREM.rawValue:
+            self = .rem
+        case HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+             HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
+            self = .light
+        case HKCategoryValueSleepAnalysis.awake.rawValue:
+            self = .awake
+        case HKCategoryValueSleepAnalysis.inBed.rawValue:
+            self = .inBed
+        default:
+            self = .light
+        }
+    }
 }
 
 // MARK: - Production Implementation
@@ -86,21 +139,12 @@ extension HealthKitManager: HealthKitDataProvider {
             self.healthStore.execute(query)
         }
         
-        return samples.compactMap { sample in
-            let stage: SleepStage
-            if #available(iOS 16.0, *) {
-                switch HKCategoryValueSleepAnalysis(rawValue: sample.value) {
-                case .inBed: stage = .inBed
-                case .asleepCore: stage = .asleepCore
-                case .asleepDeep: stage = .asleepDeep
-                case .asleepREM: stage = .asleepREM
-                case .awake: stage = .awake
-                default: stage = .inBed
-                }
-            } else {
-                stage = sample.value == HKCategoryValueSleepAnalysis.inBed.rawValue ? .inBed : .asleepCore
-            }
-            return SleepSample(startDate: sample.startDate, endDate: sample.endDate, stage: stage)
+        return samples.map { sample in
+            SleepSample(
+                startDate: sample.startDate,
+                endDate: sample.endDate,
+                stage: SleepStage(fromHealthKit: sample.value)
+            )
         }
     }
 }

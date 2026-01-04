@@ -1,0 +1,114 @@
+# Food Card UX Design
+
+## Purpose
+The **universal detail view** for any food entry on the Timeline. Provides granular quantity control and full macro/micronutrient breakdown.
+
+---
+
+## When to Show
+
+| Context | Trigger |
+|---------|---------|
+| **Adding Food** | User selects item from search/database |
+| **Barcode Scan** | Pre-fills card directly after scan |
+| **Tapping Timeline Entry** | User taps any meal bubble on Timeline |
+
+> **Key Point:** Every food entry on the Timeline opens this same Food Card. It serves as both the "Add" view and the "Edit/View" view for consistency.
+
+
+---
+
+## Nutrients Tracked
+
+### Macronutrients
+| Nutrient | Unit | Used For |
+|----------|------|----------|
+| Calories | kcal | Energy budget |
+| Total Carbs | g | Overall energy load |
+| └─ Fiber | g | Curve flattening context |
+| └─ Sugar | g | Spike severity |
+| Protein | g | Muscle Sponge insight |
+| Total Fat | g | Lipid Load insight |
+
+### Micronutrients
+| Nutrient | Unit | Used For |
+|----------|------|----------|
+| Caffeine | mg | Caffeine Jitter insight |
+| Magnesium | mg | Mineral Gap insight |
+| Zinc | mg | Mineral Gap insight |
+| Sodium | mg | Heart Health / Hydration |
+| Iron | mg | Energy / Blood Health |
+
+---
+
+## Layout Concept
+
+```
+┌─────────────────────────────────────┐
+│  ← Back                      Save ✓ │
+├─────────────────────────────────────┤
+│   🍞 Oatmeal with Banana            │  ← Food Name
+│   "Breakfast • 8:32am"              │  ← Context / Time
+├─────────────────────────────────────┤
+│   Serving Size                      │
+│   ┌─────────┐  ┌─────────────────┐  │
+│   │  1.5    │  │  cup (240ml) ▼  │  │
+│   └─────────┘  └─────────────────┘  │
+│   [ ½ ] [ 1 ] [ 1.5 ] [ 2 ] [custom]│
+├─────────────────────────────────────┤
+│   📊 MACROS                         │
+│   Calories        350 kcal          │
+│                                     │
+│   Total Carbs      52g              │
+│    └─ Fiber        6g               │
+│    └─ Sugars       18g              │
+│                                     │
+│   Protein          12g              │
+│   Total Fat         8g              │
+│                                     │
+│   ▼ Show Micronutrients             │
+├─────────────────────────────────────┤
+│   🧪 MICROS (expanded)              │
+│   Caffeine          0mg             │
+│   Magnesium        48mg             │
+│   Zinc            1.2mg             │
+│   Sodium          150mg             │
+│   Iron            1.5mg             │
+├─────────────────────────────────────┤
+│  [ Delete Entry ]                   │
+└─────────────────────────────────────┘
+```
+
+---
+
+## Context Tags (Auto-Applied)
+
+| Tag | Emoji | Condition |
+|-----|-------|-----------|
+| High Carb | 🍞 | carbs > 30g |
+| High Protein | 💪 | protein > 35g |
+| High Fat | 🧈 | fat > 25g |
+| Caffeine | ☕ | caffeine > 50mg |
+
+---
+
+## Key Interactions
+
+1. **Barcode Scan** → Pre-fills card with product data
+2. **Quantity Adjust** → Nutrients recalculate live
+3. **Unit Picker** → grams, ml, cups, pieces, tbsp
+4. **Quick Presets** → Tap ½, 1, 1.5, 2 for fast input
+5. **Micros Toggle** → Expand/collapse micronutrient section
+
+---
+
+## Design Tokens
+
+| Element | Token |
+|---------|-------|
+| Card Background | `warmCharcoal` / `cream` |
+| Corner Radius | `CornerRadius.xl` (24pt) |
+| Padding | `Spacing.md` (16pt) |
+| Calorie Font | `MonchFont.largeTitle` |
+| Macro Font | `MonchFont.headline` |
+| Micro Font | `MonchFont.subheadline` |

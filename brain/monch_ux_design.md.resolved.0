@@ -1,0 +1,96 @@
+# Monch Mascot UX Design
+
+## Current State
+`MascotHeader` displays Monch at the top of the Timeline screen with:
+- 64×64 mascot image from assets
+- Status text ("Monch is calm")
+- Prompt text ("Ready to log?")
+- Mood-tinted gradient background
+
+## Where Monch Could Appear
+
+### 1. Home Header (Current ✅)
+**Location:** Top of Timeline, always visible  
+**Size:** 64×64  
+**Variant:** In-App (watercolor)  
+**Behavior:** 
+- Reflects real-time metabolic state
+- Tappable → expands to full insight view?
+- Subtle idle animation (breathing/tail wag)
+
+---
+
+### 2. Insight Cards
+**Location:** Inline in Timeline, interspersed with logs  
+**Size:** 48×48 (smaller, illustrative)  
+**Variant:** In-App (watercolor)  
+**Behavior:**
+- Small Monch illustration on the card matching the insight mood
+- Example: "Crashing" Monch on a hypoglycemia warning card
+
+---
+
+### 3. Notifications + Dynamic Island
+**Location:** System notifications, Live Activity  
+**Size:** 32×32 (compact)  
+**Variant:** **8-Bit (pixel art)**  
+**Behavior:**
+- Compact mascot reflects alert type
+- "Hungry" Monch for meal reminders
+- "Spiking" Monch for glucose alerts
+
+---
+
+### 4. Onboarding / Welcome
+**Location:** Full-screen during first launch  
+**Size:** 200×200+ (hero)  
+**Variant:** In-App (watercolor)  
+**Behavior:**
+- Large animated Monch introduces the app
+- "Hi, I'm Monch! Let's get started."
+- Multiple poses for onboarding flow
+
+---
+
+### 5. Empty States
+**Location:** When timeline is empty  
+**Size:** 120×120  
+**Variant:** In-App (watercolor)  
+**Behavior:**
+- Hungry Monch looking hopeful
+- "Log your first meal to wake up Monch"
+
+---
+
+## Open Design Questions
+
+1. **Should tapping the header expand to a full-screen "Monch view"?**
+   - Shows detailed metabolic insight
+   - Larger animated Monch
+   - Quick action buttons
+
+2. **Does Monch speak directly or stay ambient?**
+   - Current: Text is user-focused ("You haven't eaten…")
+   - Alternative: Monch has speech bubbles ("I'm hungry!")
+
+3. **Should Monch animate continuously or only on state change?**
+   - Continuous: More alive, but battery impact
+   - On change: Subtle pulse/bounce when state transitions
+
+4. **Widget / Lock Screen?**
+   - 8-bit Monch for small widget
+   - Shows current state at a glance
+
+---
+
+## Recommendation
+
+| Surface | Variant | Size | Priority |
+|---------|---------|------|----------|
+| Home Header | In-App | 64×64 | P0 (done) |
+| Empty State | In-App | 120×120 | P0 |
+| Insight Cards | In-App | 48×48 | P1 |
+| Notifications | 8-Bit | 32×32 | P1 |
+| Dynamic Island | 8-Bit | 32×32 | P1 |
+| Onboarding | In-App | 200×200 | P2 |
+| Widget | 8-Bit | 48×48 | P2 |

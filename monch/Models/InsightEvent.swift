@@ -28,7 +28,10 @@ final class InsightEvent {
     // Link to the meal that caused it (Optional, as some insights might be cumulative)
     var associatedMealID: UUID?
     
-    init(timestamp: Date = Date(), type: InsightType, severity: Double, message: String, associatedMealID: UUID? = nil) {
+    // Whether the user has dismissed this insight
+    var isDismissed: Bool = false
+    
+    init(timestamp: Date = Date(), type: InsightType, severity: Double = 0.5, message: String, associatedMealID: UUID? = nil) {
         self.id = UUID()
         self.timestamp = timestamp
         self.type = type
