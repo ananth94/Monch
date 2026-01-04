@@ -166,6 +166,8 @@ extension InsightType {
         case .anxietyMimic: return "Anxiety Mimic"
         case .goodSpike: return "Good Spike"
         case .deepSleepRobber: return "Deep Sleep Robber"
+        case .caffeineJitter: return "Caffeine Alert"
+        case .zone2Drain: return "Glucose Sink"
         }
     }
     
@@ -177,12 +179,15 @@ extension InsightType {
         case .anxietyMimic: return "❤️"
         case .goodSpike: return "✅"
         case .deepSleepRobber: return "😴"
+        case .caffeineJitter: return "☕"
+        case .zone2Drain: return "🏃"
         }
     }
     
     var mood: GradientMood {
         switch self {
         case .sugarSpike, .anxietyMimic: return .acute
+        case .caffeineJitter, .zone2Drain: return .recovery
         case .digestionDebt, .deepSleepRobber: return .sleep
         case .muscleSponge, .goodSpike: return .recovery
         }
@@ -202,6 +207,10 @@ extension InsightType {
             return nil // No action needed
         case .deepSleepRobber:
             return "Late meals may have reduced your deep sleep. Try eating earlier."
+        case .caffeineJitter:
+            return "Perfect time for focused work! The caffeine is doing its job."
+        case .zone2Drain:
+            return "You can handle more carbs tonight—your muscles are primed."
         }
     }
     
@@ -234,6 +243,12 @@ extension InsightType {
         case .deepSleepRobber:
             return [
                 QuickAction(label: "Set Eating Reminder", icon: "clock")
+            ]
+        case .caffeineJitter:
+            return [] // Positive alert, no action needed
+        case .zone2Drain:
+            return [
+                QuickAction(label: "Log Meal", icon: "fork.knife")
             ]
         }
     }

@@ -11,7 +11,9 @@ import SwiftData
 enum InsightType: String, Codable {
     case sugarSpike      // Acute Loop
     case anxietyMimic    // Acute Loop
+    case caffeineJitter  // Acute Loop - caffeine-induced alertness
     case muscleSponge    // Recovery Loop
+    case zone2Drain      // Recovery Loop - glucose sink from exercise
     case digestionDebt   // Circadian Loop
     case deepSleepRobber // Circadian Loop
     case goodSpike       // Recovery Loop

@@ -2,19 +2,35 @@
 //  ContentView.swift
 //  monch
 //
-//  Main app entry view. Tab-based navigation with Timeline and Dashboard.
+//  Main app entry view. Shows onboarding for first-time users, then tab navigation.
 //
 
 import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var showOnboarding: Bool = false
+    
     var body: some View {
-        MainTabView()
+        ZStack {
+            if hasCompletedOnboarding {
+                MainTabView()
+                    .transition(.opacity)
+            } else {
+                OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: hasCompletedOnboarding)
     }
 }
 
-#Preview {
+#Preview("App") {
     ContentView()
         .modelContainer(for: [MealLog.self, InsightEvent.self, MascotStateLog.self, WorkoutLog.self, SleepLog.self], inMemory: true)
+}
+
+#Preview("Onboarding") {
+    OnboardingView(isOnboardingComplete: .constant(false))
 }

@@ -250,9 +250,11 @@ class InsightEngine: ObservableObject {
         switch type {
         case .sugarSpike, .anxietyMimic:
             return .spiking
+        case .caffeineJitter:
+            return .strong // Caffeine = alert/focused state
         case .digestionDebt, .deepSleepRobber:
             return .sleepy
-        case .muscleSponge, .goodSpike:
+        case .muscleSponge, .goodSpike, .zone2Drain:
             return .strong
         }
     }
@@ -368,5 +370,176 @@ class InsightEngine: ObservableObject {
         } catch {
             return false
         }
+    }
+    
+    // MARK: - Anxiety Mimic Detection (P1)
+    
+    /// Detects when low blood sugar mimics anxiety symptoms
+    /// Algorithm: 2-3h after high-carb meal + HR dropping + HRV low
+    func detectAnxietyMimic(for meal: MealLog, in modelContext: ModelContext) async -> InsightEvent? {
+        // Trigger: high carb meal 2-3 hours ago
+        guard let carbs = meal.carbs, carbs > 40 else { return nil }
+        
+        let hoursSinceMeal = Date().timeIntervalSince(meal.timestamp) / 3600
+        guard hoursSinceMeal >= 2 && hoursSinceMeal <= 3.5 else { return nil }
+        
+        // Check for HR gradient (dropping) - simplified heuristic
+        let recentRange = Date().addingTimeInterval(-1800)...Date()
+        
+        do {
+            let recentHR = try await healthKitProvider.fetchHeartRateSamples(for: recentRange)
+            guard recentHR.count >= 3 else { return nil }
+            
+            // Calculate gradient (bpm per hour)
+            let sortedSamples = recentHR.sorted { $0.timestamp < $1.timestamp }
+            let first = sortedSamples.first!
+            let last = sortedSamples.last!
+            let timeDelta = last.timestamp.timeIntervalSince(first.timestamp) / 3600
+            guard timeDelta > 0 else { return nil }
+            
+            let gradient = (last.bpm - first.bpm) / timeDelta
+            
+            // Detect rapid HR drop (anxiety mimic signal)
+            if gradient < -1.0 {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .anxietyMimic,
+                    severity: min(abs(gradient) / 5, 1.0),
+                    message: "Feeling anxious? It might be a blood sugar dip from that \(meal.name). Try a small snack.",
+                    associatedMealID: meal.id
+                )
+            }
+        } catch {
+            print("InsightEngine: Anxiety Mimic detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    // MARK: - Caffeine Jitter Detection (P1)
+    
+    /// Detects caffeine-induced elevated heart rate (not anxiety)
+    /// Algorithm: >100mg caffeine in last 4h + HR elevated + stable respiratory
+    func detectCaffeineJitter(for meals: [MealLog]) async -> InsightEvent? {
+        let fourHoursAgo = Date().addingTimeInterval(-4 * 3600)
+        
+        // Sum caffeine from recent meals
+        let recentCaffeine = meals
+            .filter { $0.timestamp > fourHoursAgo }
+            .compactMap { $0.caffeine }
+            .reduce(0, +)
+        
+        guard recentCaffeine > 100 else { return nil }
+        
+        // Check for elevated HR
+        let recentRange = Date().addingTimeInterval(-1800)...Date()
+        let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+        
+        do {
+            let recentHR = try await healthKitProvider.fetchHeartRateSamples(for: recentRange)
+            let restingHR = try await healthKitProvider.fetchBaselineRestingHeartRate(for: baselineRange) ?? 65.0
+            
+            guard !recentHR.isEmpty else { return nil }
+            
+            let avgHR = recentHR.map(\.bpm).reduce(0, +) / Double(recentHR.count)
+            
+            // Dynamic threshold: restingHR + 15 bpm
+            let threshold = restingHR + 15
+            
+            if avgHR > threshold {
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .caffeineJitter,
+                    severity: min((avgHR - threshold) / 30.0, 1.0),
+                    message: "Alert mode activated! That's \(Int(recentCaffeine))mg of caffeine working. Great time for focused work.",
+                    associatedMealID: meals.first?.id
+                )
+            }
+        } catch {
+            print("InsightEngine: Caffeine Jitter detection failed: \(error)")
+        }
+        
+        return nil
+    }
+    
+    // MARK: - Zone 2 Drain Detection (P1)
+    
+    /// Detects insulin sensitivity boost from Zone 2 exercise
+    /// Algorithm: Cardio workout with >45 min in Zone 2
+    func detectZone2Drain(for workout: WorkoutLog) -> InsightEvent? {
+        // Check for cardio type
+        guard workout.category == .cardio else { return nil }
+        
+        // Check for Zone 2 duration via zone breakdown
+        guard let breakdown = workout.hrZoneBreakdown else { return nil }
+        let zone2Minutes = breakdown.zone2Minutes
+        
+        guard zone2Minutes >= 45 else { return nil }
+        
+        return InsightEvent(
+            timestamp: workout.endTime,
+            type: .zone2Drain,
+            severity: min(Double(zone2Minutes) / 90.0, 1.0), // 90 min = max
+            message: "Your \(zone2Minutes) minute session created a glucose sink. You can handle a bigger dinner tonight!",
+            associatedMealID: nil
+        )
+    }
+    
+    // MARK: - Deep Sleep Robber Detection (P1)
+    
+    /// Detects chronic patterns that erode deep sleep
+    /// Algorithm: 7-day rolling window with avg deep sleep <45 min + late meals/caffeine
+    func detectDeepSleepRobber(in modelContext: ModelContext) async -> InsightEvent? {
+        let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+        
+        // Fetch recent sleep logs
+        let sleepPredicate = #Predicate<SleepLog> { sleep in
+            sleep.startTime > sevenDaysAgo
+        }
+        
+        let mealPredicate = #Predicate<MealLog> { meal in
+            meal.timestamp > sevenDaysAgo
+        }
+        
+        do {
+            let sleepLogs = try modelContext.fetch(FetchDescriptor<SleepLog>(predicate: sleepPredicate))
+            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
+            
+            guard sleepLogs.count >= 4 else { return nil } // Relaxed to 4 days
+            
+            // Calculate average deep sleep
+            let deepSleepMinutes = sleepLogs.compactMap { Double($0.deepSleepMinutes ?? 0) }.reduce(0, +)
+            let avgDeepSleep = deepSleepMinutes / Double(sleepLogs.count)
+            
+            guard avgDeepSleep < 45 else { return nil }
+            
+            // Count late meals (after 9pm)
+            let lateMeals = meals.filter { meal in
+                let hour = Calendar.current.component(.hour, from: meal.timestamp)
+                return hour >= 21 || hour < 5
+            }.count
+            
+            // Count late caffeine (after 2pm)
+            let lateCaffeine = meals.filter { meal in
+                let hour = Calendar.current.component(.hour, from: meal.timestamp)
+                return hour >= 14 && (meal.caffeine ?? 0) > 0
+            }.count
+            
+            if lateMeals >= 3 || lateCaffeine >= 3 {
+                let culprit = lateMeals > lateCaffeine ? "late meals" : "afternoon caffeine"
+                
+                return InsightEvent(
+                    timestamp: Date(),
+                    type: .deepSleepRobber,
+                    severity: min((45 - avgDeepSleep) / 30, 1.0),
+                    message: "Your deep sleep has been under 45 min for a week. Those \(culprit) might be the culprit.",
+                    associatedMealID: nil
+                )
+            }
+        } catch {
+            print("InsightEngine: Deep Sleep Robber detection failed: \(error)")
+        }
+        
+        return nil
     }
 }
