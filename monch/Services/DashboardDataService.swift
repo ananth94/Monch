@@ -237,7 +237,7 @@ class DashboardDataService: ObservableObject {
         if weekendLateMeals.count >= 2 {
             patterns.append(Pattern(
                 name: "Weekend Wind-Down",
-                icon: "🌙",
+                icon: .asset("sleep_kawaii"),
                 description: "Late meals detected on weekends",
                 impact: "May affect sleep quality",
                 suggestion: "Try closing the kitchen by 8pm on weekends",
@@ -260,7 +260,7 @@ class DashboardDataService: ObservableObject {
             let ratio = refueledWorkouts.count
             patterns.append(Pattern(
                 name: "Post-Workout Refuel",
-                icon: "💪",
+                icon: .asset("insight_recovery_kawaii"),
                 description: "\(ratio)/\(recentWorkouts.count) workouts followed by nutrition",
                 impact: ratio >= 3 ? "Good recovery potential" : "Could improve muscle recovery",
                 suggestion: ratio >= 3 ? "Keep it up! Your muscles thank you." : "Try eating within 2h of exercise",
@@ -278,7 +278,7 @@ class DashboardDataService: ObservableObject {
         if morningSpikes.count >= 3 {
             patterns.append(Pattern(
                 name: "Morning Rollercoaster",
-                icon: "⚡",
+                icon: .asset("insight_spike_kawaii"),
                 description: "Multiple sugar spikes before noon",
                 impact: "Energy crashes later in the day",
                 suggestion: "Add protein to breakfast to flatten the curve",
@@ -418,4 +418,3 @@ class DashboardDataService: ObservableObject {
         return maxStreak
     }
 }
-

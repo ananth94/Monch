@@ -34,6 +34,9 @@ struct MainTabView: View {
     @State private var showStreakCelebration = false
     
     @Query(sort: \MealLog.timestamp, order: .reverse) private var meals: [MealLog]
+    @Query(sort: \InsightEvent.timestamp, order: .reverse) private var insights: [InsightEvent]
+    @Query(sort: \WorkoutLog.startTime, order: .reverse) private var workouts: [WorkoutLog]
+    @Query(sort: \SleepLog.endTime, order: .reverse) private var sleepLogs: [SleepLog]
     @ObservedObject private var streakTracker = StreakTracker.shared
     
     var body: some View {
@@ -57,11 +60,11 @@ struct MainTabView: View {
         }
         .tint(Color.Monch.sage)
         .onAppear {
-            streakTracker.updateStreak(meals: meals)
+            updateStreak()
             checkForCelebration()
         }
-        .onChange(of: meals.count) { _, _ in
-            streakTracker.updateStreak(meals: meals)
+        .onChange(of: loggingSignalVersion) { _, _ in
+            updateStreak()
             checkForCelebration()
         }
         .fullScreenCover(isPresented: $showStreakCelebration) {
@@ -84,6 +87,19 @@ struct MainTabView: View {
                 showStreakCelebration = true
             }
         }
+    }
+    
+    private var loggingSignalVersion: Int {
+        meals.count + insights.count + workouts.count + sleepLogs.count
+    }
+    
+    private func updateStreak() {
+        streakTracker.updateStreak(
+            meals: meals,
+            insights: insights.filter { !$0.isDismissed },
+            workouts: workouts,
+            sleepLogs: sleepLogs
+        )
     }
 }
 

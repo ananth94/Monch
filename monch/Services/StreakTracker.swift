@@ -3,7 +3,7 @@
 //  monch
 //
 //  Service to calculate and persist streak data for logging consistency.
-//  Tracks consecutive days with at least one MealLog entry.
+//  Tracks consecutive days with at least one meaningful logging signal.
 //
 
 import Foundation
@@ -72,13 +72,23 @@ class StreakTracker: ObservableObject {
     
     // MARK: - Public Methods
     
-    /// Calculate and update streak based on meal logs
-    func updateStreak(meals: [MealLog]) {
+    /// Calculate and update streak based on meaningful logging signals.
+    func updateStreak(
+        meals: [MealLog],
+        insights: [InsightEvent] = [],
+        workouts: [WorkoutLog] = [],
+        sleepLogs: [SleepLog] = []
+    ) {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         
-        // Get unique dates with logs, sorted descending
-        let logDates = Set(meals.map { calendar.startOfDay(for: $0.timestamp) })
+        let mealDates = meals.map { calendar.startOfDay(for: $0.timestamp) }
+        let insightDates = insights.map { calendar.startOfDay(for: $0.timestamp) }
+        let workoutDates = workouts.map { calendar.startOfDay(for: $0.startTime) }
+        let sleepDates = sleepLogs.map { calendar.startOfDay(for: $0.endTime) }
+        
+        // Get unique dates with any logging signal, sorted descending.
+        let logDates = Set(mealDates + insightDates + workoutDates + sleepDates)
             .sorted(by: >)
         
         guard let mostRecentLogDate = logDates.first else {

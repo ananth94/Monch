@@ -58,8 +58,7 @@ struct PatternDetailView: View {
     
     private var patternHeader: some View {
         HStack(spacing: Spacing.md) {
-            Text(pattern.icon)
-                .font(.system(size: 40))
+            MonchIconView(token: pattern.icon, size: 40, tint: patternBackgroundColor)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(pattern.name)
@@ -270,7 +269,7 @@ private struct LinkedInsightRow: View {
 #Preview("Pattern Detail") {
     PatternDetailView(pattern: Pattern(
         name: "Weekend Wind-Down",
-        icon: "🌙",
+        icon: .asset("sleep_kawaii"),
         description: "Late meals detected on Fri & Sat",
         impact: "~12% less Deep Sleep on those nights",
         suggestion: "Try closing the kitchen by 8pm on weekends",

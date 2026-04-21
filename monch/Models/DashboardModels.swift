@@ -169,7 +169,7 @@ struct Trend: Identifiable {
 struct Pattern: Identifiable {
     let id = UUID()
     let name: String
-    let icon: String
+    let icon: MonchIconToken
     let description: String
     let impact: String
     let suggestion: String
