@@ -20,7 +20,7 @@ struct InsightCardView: View {
     var body: some View {
         CardDetailShell(
             title: insight.type.displayTitle,
-            icon: insight.type.icon,
+            icon: insight.type.iconToken,
             timestamp: insight.timestamp,
             contextTag: severityTag,
             mood: insight.type.mood,
@@ -51,9 +51,9 @@ struct InsightCardView: View {
     
     private var severityTag: String? {
         // severity is 0.0 to 1.0 in the model
-        if insight.severity < 0.33 { return "🟢 Mild" }
-        if insight.severity < 0.66 { return "🟡 Moderate" }
-        return "🔶 Significant"
+        if insight.severity < 0.33 { return "Mild" }
+        if insight.severity < 0.66 { return "Moderate" }
+        return "Significant"
     }
     
     // MARK: - Explanation Section
@@ -88,7 +88,7 @@ struct InsightCardView: View {
         VStack(spacing: Spacing.sm) {
             ForEach(insight.type.quickActions, id: \.label) { action in
                 MonchPrimaryButton(action.label, icon: action.icon) {
-                    // TODO: Wire up actions (open food logger, start workout, etc.)
+                    // TODO: Wire up actions (open meal event flow, start workout, etc.)
                 }
             }
         }
@@ -130,8 +130,7 @@ private struct LinkedMealRow: View {
     
     var body: some View {
         HStack(spacing: Spacing.sm) {
-            Text("🍽️")
-                .font(.title3)
+            MonchIconView(token: .asset("meal_kawaii"), size: 24)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(meal.name)
@@ -180,25 +179,25 @@ extension InsightType {
         }
     }
     
-    var icon: String {
+    var iconToken: MonchIconToken {
         switch self {
-        case .sugarSpike: return "💡"
-        case .digestionDebt: return "🌙"
-        case .muscleSponge: return "💪"
-        case .anxietyMimic: return "❤️"
-        case .goodSpike: return "✅"
-        case .deepSleepRobber: return "😴"
-        case .caffeineJitter: return "☕"
-        case .zone2Drain: return "🏃"
+        case .sugarSpike: return .asset("insight_spike_kawaii")
+        case .digestionDebt: return .asset("sleep_kawaii")
+        case .muscleSponge: return .asset("insight_recovery_kawaii")
+        case .anxietyMimic: return .symbol("heart.fill")
+        case .goodSpike: return .asset("insight_recovery_kawaii")
+        case .deepSleepRobber: return .asset("sleep_kawaii")
+        case .caffeineJitter: return .asset("coffee_kawaii")
+        case .zone2Drain: return .asset("workout_kawaii")
         // HRV-Powered (Sprint 12)
-        case .recoveryGap: return "🔋"
-        case .stressBuffer: return "🛡️"
-        case .mineralGap: return "💊"
-        case .brainFogForecast: return "🧠"
-        case .morningReadiness: return "🌅"
-        case .mealImpactScore: return "📊"
-        case .alcoholImpact: return "🍷"
-        case .fastingBenefit: return "🌿"
+        case .recoveryGap: return .asset("hrv_low_kawaii")
+        case .stressBuffer: return .symbol("shield.fill")
+        case .mineralGap: return .asset("mineral_kawaii")
+        case .brainFogForecast: return .asset("brain_fog_kawaii")
+        case .morningReadiness: return .asset("hrv_high_kawaii")
+        case .mealImpactScore: return .asset("meal_kawaii")
+        case .alcoholImpact: return .asset("alcohol_kawaii")
+        case .fastingBenefit: return .asset("fasting_kawaii")
         }
     }
     
@@ -287,12 +286,12 @@ extension InsightType {
             return [] // Positive alert, no action needed
         case .zone2Drain:
             return [
-                QuickAction(label: "Log Meal", icon: "fork.knife")
+                QuickAction(label: "Log Meal Event", icon: "fork.knife")
             ]
         // HRV-Powered (Sprint 12)
         case .recoveryGap:
             return [
-                QuickAction(label: "Log Meal", icon: "fork.knife")
+                QuickAction(label: "Log Meal Event", icon: "fork.knife")
             ]
         case .stressBuffer, .fastingBenefit, .morningReadiness:
             return [] // Positive insights, no action needed

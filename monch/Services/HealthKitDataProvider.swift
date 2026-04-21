@@ -76,7 +76,7 @@ enum SleepStage: String, Codable, CaseIterable, Sendable {
     }
     
     /// Initialize from HealthKit category value
-    init(fromHealthKit value: Int) {
+    nonisolated init(fromHealthKit value: Int) {
         switch value {
         case HKCategoryValueSleepAnalysis.asleepDeep.rawValue:
             self = .deep

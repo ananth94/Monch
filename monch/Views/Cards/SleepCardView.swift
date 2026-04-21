@@ -17,7 +17,7 @@ struct SleepCardView: View {
     var body: some View {
         CardDetailShell(
             title: "Last Night's Sleep",
-            icon: "😴",
+            icon: .asset("sleep_kawaii"),
             timestamp: sleepLog.startTime,
             contextTag: qualityTag,
             mood: .sleep,
@@ -50,10 +50,10 @@ struct SleepCardView: View {
         let score = sleepLog.computedQualityScore
         let efficiency = Int(sleepLog.sleepEfficiency * 100)
         let status: String
-        if score >= 0.8 { status = "✨ Great" }
-        else if score >= 0.6 { status = "👍 Good" }
-        else if score >= 0.4 { status = "😐 Fair" }
-        else { status = "😴 Poor" }
+        if score >= 0.8 { status = "Great" }
+        else if score >= 0.6 { status = "Good" }
+        else if score >= 0.4 { status = "Fair" }
+        else { status = "Poor" }
         
         return "\(status) • \(efficiency)% Eff."
     }

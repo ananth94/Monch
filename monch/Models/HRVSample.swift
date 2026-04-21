@@ -21,7 +21,7 @@ struct HRVSample: Identifiable, Sendable {
     }
     
     /// Initialize from HealthKit sample
-    init(from sample: HKQuantitySample) {
+    nonisolated init(from sample: HKQuantitySample) {
         self.id = UUID()
         self.timestamp = sample.startDate
         self.sdnn = sample.quantity.doubleValue(for: .secondUnit(with: .milli))

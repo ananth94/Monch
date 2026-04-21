@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 // MARK: - Metabolic Vibe (Qualitative Score)
 
@@ -19,13 +20,13 @@ enum MetabolicTier: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    var emoji: String {
+    var symbolName: String {
         switch self {
-        case .thriving: return "🌟"
-        case .balanced: return "💚"
-        case .steady: return "😊"
-        case .learning: return "🌤️"
-        case .resetting: return "🌱"
+        case .thriving: return "sparkles"
+        case .balanced: return "leaf.fill"
+        case .steady: return "circle.fill"
+        case .learning: return "cloud.sun.fill"
+        case .resetting: return "arrow.clockwise"
         }
     }
     
@@ -122,6 +123,22 @@ struct DailySummary: Identifiable {
     let calories: Double
     let vibe: MetabolicTier
     let macros: MacroBreakdown
+    let mealCount: Int
+    let insightCount: Int
+    let workoutCount: Int
+    let hasSleepData: Bool
+    
+    var hasNutritionData: Bool {
+        calories > 0 || macros.totalCalories > 0
+    }
+    
+    var signalCount: Int {
+        mealCount + insightCount + workoutCount + (hasSleepData ? 1 : 0)
+    }
+    
+    var hasAnySignal: Bool {
+        signalCount > 0
+    }
     
     var dayOfWeek: String {
         let formatter = DateFormatter()
@@ -195,12 +212,12 @@ enum StreakType: String, CaseIterable {
     case noSpikes = "Spike-Free Days"
     case consistentLogging = "Consistent Logging"
     
-    var icon: String {
+    var iconToken: MonchIconToken {
         switch self {
-        case .kitchenClosed: return "🌙"
-        case .postWorkoutRefuel: return "💪"
-        case .noSpikes: return "⚡"
-        case .consistentLogging: return "📝"
+        case .kitchenClosed: return .asset("sleep_kawaii")
+        case .postWorkoutRefuel: return .asset("insight_recovery_kawaii")
+        case .noSpikes: return .asset("insight_spike_kawaii")
+        case .consistentLogging: return .symbol("checklist")
         }
     }
 }

@@ -41,9 +41,9 @@ struct FoodCardView: View {
     
     private var contextTag: String? {
         guard let carbs = meal.carbs else { return nil }
-        if carbs > 50 { return "🍞 High Carb" }
-        if let protein = meal.protein, protein > 30 { return "💪 High Protein" }
-        if let fat = meal.fat, fat > 25 { return "🥑 High Fat" }
+        if carbs > 50 { return "High Carb" }
+        if let protein = meal.protein, protein > 30 { return "High Protein" }
+        if let fat = meal.fat, fat > 25 { return "High Fat" }
         return nil
     }
     
@@ -131,7 +131,7 @@ struct FoodCardView: View {
     var body: some View {
         CardDetailShell(
             title: meal.name,
-            icon: meal.mealType?.icon ?? "🍽️",
+            icon: .asset("meal_kawaii"),
             timestamp: meal.timestamp,
             contextTag: contextTag,
             mood: cardMood,

@@ -218,7 +218,7 @@ struct MonchDeleteButton: View {
 
 #Preview("Buttons") {
     VStack(spacing: 16) {
-        MonchPrimaryButton("Log Meal", icon: "fork.knife") {}
+        MonchPrimaryButton("Log Meal Event", icon: "fork.knife") {}
         MonchSecondaryButton("Dismiss") {}
         MonchDeleteButton {}
     }

@@ -39,7 +39,13 @@ class HealthKitManager: ObservableObject {
             HKObjectType.workoutType(),
             
             // Sleep
-            HKCategoryType(.sleepAnalysis)
+            HKCategoryType(.sleepAnalysis),
+            
+            // Nutrition
+            HKQuantityType(.dietaryEnergyConsumed),
+            HKQuantityType(.dietaryCarbohydrates),
+            HKQuantityType(.dietaryProtein),
+            HKQuantityType(.dietaryFatTotal)
         ]
         
         // Wrist temperature (Series 8+ only)
@@ -74,7 +80,7 @@ class HealthKitManager: ObservableObject {
     func verifyDataAccess() async {
         do {
             let range = Date().addingTimeInterval(-86400)...Date()
-            let samples = try await fetchHeartRateSamples(for: range)
+            _ = try await fetchHeartRateSamples(for: range)
             // If we got here without error, we have access
             // Empty results just means no data, not denied access
             isAuthorized = true
@@ -229,9 +235,267 @@ class HealthKitManager: ObservableObject {
             healthStore.execute(query)
         }
     }
+    
+    // MARK: - Nutrition / Meal Events
+    
+    func fetchImportedMealEvents(for range: ClosedRange<Date>) async throws -> [ImportedMealEvent] {
+        async let dietaryEnergySamples = fetchQuantitySamples(type: HKQuantityType(.dietaryEnergyConsumed), range: range)
+        async let carbohydrateSamples = fetchQuantitySamples(type: HKQuantityType(.dietaryCarbohydrates), range: range)
+        async let proteinSamples = fetchQuantitySamples(type: HKQuantityType(.dietaryProtein), range: range)
+        async let fatSamples = fetchQuantitySamples(type: HKQuantityType(.dietaryFatTotal), range: range)
+        
+        let samplePoints = try await nutritionSamplePoints(
+            energySamples: dietaryEnergySamples,
+            carbohydrateSamples: carbohydrateSamples,
+            proteinSamples: proteinSamples,
+            fatSamples: fatSamples
+        )
+        
+        return inferImportedMealEvents(from: samplePoints)
+    }
+    
+    func fetchNutritionEventDates(for range: ClosedRange<Date>) async throws -> [Date] {
+        try await fetchImportedMealEvents(for: range).map(\.timestamp)
+    }
+    
+    func fetchNutritionEventCounts(for range: ClosedRange<Date>) async throws -> [Date: Int] {
+        let inferredEvents = try await fetchNutritionEventDates(for: range)
+        return countNutritionEventsByDay(inferredEvents)
+    }
+    
+    private func fetchQuantitySampleDates(type: HKQuantityType, range: ClosedRange<Date>) async throws -> [Date] {
+        let samples = try await fetchQuantitySamples(type: type, range: range)
+        return samples.map(\.startDate)
+    }
+    
+    private func nutritionSamplePoints(
+        energySamples: [HKQuantitySample],
+        carbohydrateSamples: [HKQuantitySample],
+        proteinSamples: [HKQuantitySample],
+        fatSamples: [HKQuantitySample]
+    ) -> [ImportedNutritionSamplePoint] {
+        let energyUnit = HKUnit.kilocalorie()
+        let macroUnit = HKUnit.gram()
+        
+        let energyPoints = energySamples.compactMap {
+            point(
+                from: $0,
+                sampleType: .energy,
+                value: $0.quantity.doubleValue(for: energyUnit)
+            )
+        }
+        let carbohydratePoints = carbohydrateSamples.compactMap {
+            point(
+                from: $0,
+                sampleType: .carbohydrates,
+                value: $0.quantity.doubleValue(for: macroUnit)
+            )
+        }
+        let proteinPoints = proteinSamples.compactMap {
+            point(
+                from: $0,
+                sampleType: .protein,
+                value: $0.quantity.doubleValue(for: macroUnit)
+            )
+        }
+        let fatPoints = fatSamples.compactMap {
+            point(
+                from: $0,
+                sampleType: .fat,
+                value: $0.quantity.doubleValue(for: macroUnit)
+            )
+        }
+        
+        return energyPoints + carbohydratePoints + proteinPoints + fatPoints
+    }
+    
+    private func inferImportedMealEvents(from samplePoints: [ImportedNutritionSamplePoint]) -> [ImportedMealEvent] {
+        let sortedSamplePoints = samplePoints.sorted { $0.timestamp < $1.timestamp }
+        guard !sortedSamplePoints.isEmpty else { return [] }
+        
+        let clusteringWindow: TimeInterval = 20 * 60
+        var inferredEvents: [ImportedMealEvent] = []
+        
+        var currentCluster: [ImportedNutritionSamplePoint] = [sortedSamplePoints[0]]
+        var clusterAnchor = sortedSamplePoints[0].timestamp
+        
+        for samplePoint in sortedSamplePoints.dropFirst() {
+            if samplePoint.timestamp.timeIntervalSince(clusterAnchor) > clusteringWindow {
+                if let event = buildImportedMealEvent(from: currentCluster) {
+                    inferredEvents.append(event)
+                }
+                currentCluster = [samplePoint]
+                clusterAnchor = samplePoint.timestamp
+            } else {
+                currentCluster.append(samplePoint)
+            }
+        }
+        
+        if let event = buildImportedMealEvent(from: currentCluster) {
+            inferredEvents.append(event)
+        }
+        
+        return inferredEvents
+    }
+    
+    private func countNutritionEventsByDay(_ inferredEvents: [Date]) -> [Date: Int] {
+        let calendar = Calendar.current
+        var countsByDay: [Date: Int] = [:]
+        
+        for timestamp in inferredEvents {
+            countsByDay[calendar.startOfDay(for: timestamp), default: 0] += 1
+        }
+        
+        return countsByDay
+    }
+    
+    private func buildImportedMealEvent(from cluster: [ImportedNutritionSamplePoint]) -> ImportedMealEvent? {
+        guard let first = cluster.first else { return nil }
+        guard clusterQualifiesAsMeal(cluster) else { return nil }
+        
+        let title = cluster.compactMap(\.foodType).first { !$0.isEmpty }
+        let sourceName = cluster.compactMap(\.sourceName).first { !$0.isEmpty }
+        
+        return ImportedMealEvent(
+            timestamp: first.timestamp,
+            title: title ?? "Imported Meal",
+            sourceName: sourceName,
+            calories: cluster.reduce(0) { $0 + ($1.calories ?? 0) },
+            carbs: cluster.reduce(0) { $0 + ($1.carbs ?? 0) },
+            protein: cluster.reduce(0) { $0 + ($1.protein ?? 0) },
+            fat: cluster.reduce(0) { $0 + ($1.fat ?? 0) }
+        )
+    }
+    
+    private func point(
+        from sample: HKQuantitySample,
+        sampleType: ImportedNutritionSampleType,
+        value: Double
+    ) -> ImportedNutritionSamplePoint? {
+        guard value > 0 else { return nil }
+        
+        let foodType = (sample.metadata?[HKMetadataKeyFoodType] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedFoodType = foodType?.isEmpty == false ? foodType : nil
+        
+        let point = ImportedNutritionSamplePoint(
+            timestamp: sample.startDate,
+            foodType: normalizedFoodType,
+            sourceName: sample.sourceRevision.source.name,
+            sampleType: sampleType,
+            duration: sample.endDate.timeIntervalSince(sample.startDate),
+            calories: sampleType == .energy ? value : nil,
+            carbs: sampleType == .carbohydrates ? value : nil,
+            protein: sampleType == .protein ? value : nil,
+            fat: sampleType == .fat ? value : nil
+        )
+        
+        guard point.hasFoodType || !isLikelyAggregateFallback(point) else {
+            return nil
+        }
+        
+        return point
+    }
+    
+    // Sources without explicit food metadata are treated conservatively so daily
+    // nutrition aggregates do not become fake meal events.
+    private func clusterQualifiesAsMeal(_ cluster: [ImportedNutritionSamplePoint]) -> Bool {
+        guard let first = cluster.first else { return false }
+        
+        if cluster.contains(where: \.hasFoodType) {
+            return true
+        }
+        
+        let distinctSampleTypes = Set(cluster.map(\.sampleType))
+        let totalCalories = cluster.reduce(0) { $0 + ($1.calories ?? 0) }
+        let totalMacros = cluster.reduce(0) { partialResult, point in
+            partialResult + (point.carbs ?? 0) + (point.protein ?? 0) + (point.fat ?? 0)
+        }
+        
+        guard distinctSampleTypes.count >= 2 else { return false }
+        guard totalCalories <= 1_500 else { return false }
+        guard totalMacros <= 220 else { return false }
+        guard !isNearDayBoundary(first.timestamp) else { return false }
+        
+        return true
+    }
+    
+    private func isLikelyAggregateFallback(_ point: ImportedNutritionSamplePoint) -> Bool {
+        point.duration > (2 * 60 * 60) || isNearDayBoundary(point.timestamp)
+    }
+    
+    private func isNearDayBoundary(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: startOfDay) else {
+            return false
+        }
+        
+        let boundaryWindow: TimeInterval = 10 * 60
+        return abs(date.timeIntervalSince(startOfDay)) <= boundaryWindow
+            || abs(endOfDay.timeIntervalSince(date)) <= boundaryWindow
+    }
 }
 
 // MARK: - Supporting Types
+
+struct ImportedMealEvent: Identifiable, Sendable {
+    let id: UUID
+    let timestamp: Date
+    let title: String
+    let sourceName: String?
+    let calories: Double
+    let carbs: Double
+    let protein: Double
+    let fat: Double
+    
+    init(
+        id: UUID = UUID(),
+        timestamp: Date,
+        title: String,
+        sourceName: String?,
+        calories: Double,
+        carbs: Double,
+        protein: Double,
+        fat: Double
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        self.title = title
+        self.sourceName = sourceName
+        self.calories = calories
+        self.carbs = carbs
+        self.protein = protein
+        self.fat = fat
+    }
+    
+    var hasNutritionDetails: Bool {
+        calories > 0 || carbs > 0 || protein > 0 || fat > 0
+    }
+}
+
+private enum ImportedNutritionSampleType: Sendable {
+    case energy
+    case carbohydrates
+    case protein
+    case fat
+}
+
+private struct ImportedNutritionSamplePoint {
+    let timestamp: Date
+    let foodType: String?
+    let sourceName: String?
+    let sampleType: ImportedNutritionSampleType
+    let duration: TimeInterval
+    var calories: Double? = nil
+    var carbs: Double? = nil
+    var protein: Double? = nil
+    var fat: Double? = nil
+    
+    var hasFoodType: Bool {
+        foodType?.isEmpty == false
+    }
+}
 
 struct BackfillSummary {
     let heartRateSamples: Int

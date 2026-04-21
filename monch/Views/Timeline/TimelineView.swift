@@ -20,20 +20,26 @@ struct TimelineView: View {
     @ObservedObject private var insightEngine = InsightEngine.shared
     
     @State private var showingMascotDetail = false
-    @State private var showingFoodLogger = false
+    @State private var showingMealLogger = false
     @State private var showingExerciseLogger = false
     @State private var showingSleepLogger = false
     @State private var showingCaffeineLogger = false
-    @State private var showingSupplementLogger = false
+    @State private var showingAlcoholLogger = false
     @State private var showingVibeCheck = false
+    @State private var healthKitMealEvents: [ImportedMealEvent] = []
     @State private var selectedMeal: MealLog?
+    @State private var selectedEventGroup: ConsumableEventGroup?
     @State private var selectedInsight: InsightEvent?
     @State private var selectedWorkout: WorkoutLog?
     @State private var selectedSleep: SleepLog?
     @State private var selectedVibe: VibeCheck?
-    @State private var selectedDate: Date = Date()
+    @Binding private var selectedDate: Date
     @State private var showingDatePicker = false
     @State private var scrollOffset: CGFloat = 0
+    
+    init(selectedDate: Binding<Date> = .constant(Date())) {
+        self._selectedDate = selectedDate
+    }
     
     var body: some View {
         NavigationStack {
@@ -69,7 +75,7 @@ struct TimelineView: View {
                             // Timeline items
                             if timelineItems.isEmpty {
                                 EmptyTimelineView {
-                                    showingFoodLogger = true
+                                    showingMealLogger = true
                                 }
                             } else {
                                 timelineList
@@ -92,9 +98,9 @@ struct TimelineView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button {
-                            showingFoodLogger = true
+                            showingMealLogger = true
                         } label: {
-                            Label("Log Meal", systemImage: "fork.knife")
+                            Label("Log Meal Event", systemImage: "fork.knife")
                         }
                         
                         Button {
@@ -104,9 +110,9 @@ struct TimelineView: View {
                         }
                         
                         Button {
-                            showingSupplementLogger = true
+                            showingAlcoholLogger = true
                         } label: {
-                            Label("Supplement Stack", systemImage: "pills.fill")
+                            Label("Log Alcohol", systemImage: "wineglass.fill")
                         }
                         
                         Divider()
@@ -142,8 +148,8 @@ struct TimelineView: View {
                     handleMascotAction(action)
                 }
             }
-            .sheet(isPresented: $showingFoodLogger) {
-                FoodSearchView { meal in
+            .sheet(isPresented: $showingMealLogger) {
+                MealEventLogView { meal in
                     modelContext.insert(meal)
                     // Trigger insight analysis
                     Task {
@@ -165,17 +171,13 @@ struct TimelineView: View {
             }
             .sheet(isPresented: $showingCaffeineLogger) {
                 CaffeineQuickAddView { meal in
-                    Task {
+                    Task { @MainActor in
                         await insightEngine.analyzeMeal(meal, in: modelContext)
                     }
                 }
             }
-            .sheet(isPresented: $showingSupplementLogger) {
-                SupplementStackView { meal in
-                    Task {
-                        await insightEngine.analyzeMeal(meal, in: modelContext)
-                    }
-                }
+            .sheet(isPresented: $showingAlcoholLogger) {
+                AlcoholQuickAddView()
             }
             .sheet(isPresented: $showingVibeCheck) {
                 VibeCheckView()
@@ -186,22 +188,40 @@ struct TimelineView: View {
             .onChange(of: meals.count) { _, _ in
                 insightEngine.refreshMood(meals: meals, insights: insights)
             }
+            .onChange(of: healthKit.isAuthorized) { _, isAuthorized in
+                Task {
+                    await loadHealthKitMealEvents(isAuthorized: isAuthorized)
+                }
+            }
+            .task(id: selectedDate) {
+                await loadHealthKitMealEvents(isAuthorized: healthKit.isAuthorized)
+            }
             .sheet(item: $selectedMeal) { meal in
                 FoodCardView(meal: meal) {
-                    let mealID = meal.id
-                    modelContext.delete(meal)
-                    
-                    // Cleanup associated insights
-                    let predicate = #Predicate<InsightEvent> { insight in
-                        insight.associatedMealID == mealID
-                    }
-                    try? modelContext.delete(model: InsightEvent.self, where: predicate)
-                    
+                    deleteMealAndAssociatedInsights(meal)
                     selectedMeal = nil
                     
                     // Refresh mascot mood immediately
                     insightEngine.refreshMood(meals: meals, insights: insights)
                 }
+            }
+            .sheet(item: $selectedEventGroup) { group in
+                ConsumableEventGroupCardView(
+                    group: group,
+                    onIncrement: { template in
+                        let newEvent = incrementConsumableEvent(from: template)
+                        insightEngine.refreshMood(meals: meals, insights: insights)
+                        return newEvent
+                    },
+                    onRemoveLatest: { event in
+                        deleteMealAndAssociatedInsights(event)
+                        insightEngine.refreshMood(meals: meals, insights: insights)
+                    },
+                    onDeleteEvent: { event in
+                        deleteMealAndAssociatedInsights(event)
+                        insightEngine.refreshMood(meals: meals, insights: insights)
+                    }
+                )
             }
             .sheet(item: $selectedInsight) { insight in
                 InsightCardView(insight: insight)
@@ -222,8 +242,8 @@ struct TimelineView: View {
     
     private func handleMascotAction(_ action: String) {
         switch action {
-        case "Log Meal", "Log Protein", "Quick Snack":
-            showingFoodLogger = true
+        case "Log Meal Event", "Log Protein", "Quick Snack":
+            showingMealLogger = true
         case "Add Walk":
             // TODO: Deep link to workout/activity flow
             break
@@ -247,6 +267,7 @@ struct TimelineView: View {
                                 item: item,
                                 cardIndex: index,
                                 onMealTap: { selectedMeal = $0 },
+                                onEventGroupTap: { selectedEventGroup = $0 },
                                 onInsightTap: { selectedInsight = $0 },
                                 onWorkoutTap: { selectedWorkout = $0 },
                                 onSleepTap: { selectedSleep = $0 },
@@ -270,13 +291,14 @@ struct TimelineView: View {
     
     private var timelineItems: [TimelineItem] {
         let calendar = Calendar.current
-        let startOfSelectedDay = calendar.startOfDay(for: selectedDate)
-        let endOfSelectedDay = calendar.date(byAdding: .day, value: 1, to: startOfSelectedDay)!
         
         // Filter items to selected day (or show all if today for real-time feel)
-        let mealItems = meals
-            .filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
-            .map { TimelineItem.meal($0) }
+        let dayMeals = meals.filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
+        let (groupedEvents, standaloneMeals) = groupConsumableEvents(from: dayMeals)
+        let mealItems = standaloneMeals.map { TimelineItem.meal($0) }
+        let healthKitMealItems = dedupedHealthKitMealEvents(against: standaloneMeals)
+            .map { TimelineItem.healthKitMeal($0) }
+        let groupedEventItems = groupedEvents.map { TimelineItem.eventGroup($0) }
         let insightItems = insights
             .filter { !$0.isDismissed && calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
             .map { TimelineItem.insight($0) }
@@ -289,7 +311,7 @@ struct TimelineView: View {
         let vibeItems = vibeChecks
             .filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
             .map { TimelineItem.vibe($0) }
-        return (mealItems + insightItems + workoutItems + sleepItems + vibeItems).sorted { $0.timestamp > $1.timestamp }
+        return (mealItems + healthKitMealItems + groupedEventItems + insightItems + workoutItems + sleepItems + vibeItems).sorted { $0.timestamp > $1.timestamp }
     }
     
     private var groupedByDay: [(key: Date, value: [TimelineItem])] {
@@ -335,30 +357,172 @@ struct TimelineView: View {
         .padding(.horizontal)
         .padding(.top, 8)
     }
+    
+    private func groupConsumableEvents(from meals: [MealLog]) -> ([ConsumableEventGroup], [MealLog]) {
+        let timeWindow: TimeInterval = 15 * 60
+        var groupedEvents: [ConsumableEventGroup] = []
+        var standaloneMeals: [MealLog] = []
+        
+        struct GroupingKey: Hashable {
+            let kind: ConsumableEventKind?
+            let name: String
+        }
+        
+        let groupedByKindAndName = Dictionary(grouping: meals) { meal in
+            GroupingKey(kind: meal.consumableEventKind, name: meal.name)
+        }
+        
+        for (key, groupedMeals) in groupedByKindAndName {
+            guard let kind = key.kind else {
+                standaloneMeals.append(contentsOf: groupedMeals)
+                continue
+            }
+            
+            let sortedMeals = groupedMeals.sorted { $0.timestamp < $1.timestamp }
+            var currentCluster: [MealLog] = []
+            
+            for meal in sortedMeals {
+                if let previous = currentCluster.last,
+                   meal.timestamp.timeIntervalSince(previous.timestamp) <= timeWindow {
+                    currentCluster.append(meal)
+                } else {
+                    flushConsumableCluster(&currentCluster, kind: kind, name: key.name, into: &groupedEvents)
+                    currentCluster = [meal]
+                }
+            }
+            
+            flushConsumableCluster(&currentCluster, kind: kind, name: key.name, into: &groupedEvents)
+        }
+        
+        return (groupedEvents.sorted { $0.timestamp > $1.timestamp }, standaloneMeals.sorted { $0.timestamp > $1.timestamp })
+    }
+    
+    private func flushConsumableCluster(
+        _ cluster: inout [MealLog],
+        kind: ConsumableEventKind,
+        name: String,
+        into groups: inout [ConsumableEventGroup]
+    ) {
+        guard !cluster.isEmpty else { return }
+        
+        groups.append(ConsumableEventGroup(kind: kind, name: name, events: cluster))
+        
+        cluster.removeAll()
+    }
+    
+    private func deleteMealAndAssociatedInsights(_ meal: MealLog) {
+        let mealID = meal.id
+        modelContext.delete(meal)
+        
+        let predicate = #Predicate<InsightEvent> { insight in
+            insight.associatedMealID == mealID
+        }
+        try? modelContext.delete(model: InsightEvent.self, where: predicate)
+    }
+    
+    private func incrementConsumableEvent(from template: MealLog) -> MealLog {
+        let timestamp = template.timestamp.addingTimeInterval(60)
+        let newEvent = MealLog(
+            timestamp: timestamp,
+            name: template.name,
+            quantity: 1.0,
+            mealType: template.mealType,
+            calories: template.calories,
+            carbs: template.carbs,
+            protein: template.protein,
+            fat: template.fat,
+            fiber: template.fiber,
+            sugar: template.sugar,
+            caffeine: template.caffeine,
+            magnesium: template.magnesium,
+            zinc: template.zinc,
+            sodium: template.sodium,
+            iron: template.iron,
+            tags: template.contextTags
+        )
+        
+        modelContext.insert(newEvent)
+        
+        if newEvent.consumableEventKind == .caffeine {
+            Task { @MainActor in
+                await insightEngine.analyzeMeal(newEvent, in: modelContext)
+            }
+        }
+        
+        return newEvent
+    }
+    
+    private func loadHealthKitMealEvents(isAuthorized: Bool) async {
+        guard isAuthorized else {
+            await MainActor.run {
+                healthKitMealEvents = []
+            }
+            return
+        }
+        
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: selectedDate)
+        guard let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: startOfDay) else {
+            await MainActor.run {
+                healthKitMealEvents = []
+            }
+            return
+        }
+        
+        do {
+            let eventDates = try await healthKit.fetchImportedMealEvents(for: startOfDay...endOfDay)
+            await MainActor.run {
+                healthKitMealEvents = eventDates.sorted { $0.timestamp > $1.timestamp }
+            }
+        } catch {
+            await MainActor.run {
+                healthKitMealEvents = []
+            }
+        }
+    }
+    
+    private func dedupedHealthKitMealEvents(against localMeals: [MealLog]) -> [ImportedMealEvent] {
+        let localMealTimestamps = localMeals
+            .filter { !$0.isConsumableEvent }
+            .map(\.timestamp)
+        let dedupeWindow: TimeInterval = 20 * 60
+        
+        return healthKitMealEvents.filter { event in
+            !localMealTimestamps.contains { localTimestamp in
+                abs(localTimestamp.timeIntervalSince(event.timestamp)) <= dedupeWindow
+            }
+        }
+    }
 }
 
 // MARK: - Timeline Item Enum
 
 enum TimelineItem: Identifiable {
     case meal(MealLog)
+    case healthKitMeal(ImportedMealEvent)
+    case eventGroup(ConsumableEventGroup)
     case insight(InsightEvent)
     case workout(WorkoutLog)
     case sleep(SleepLog)
     case vibe(VibeCheck)
     
-    var id: UUID {
+    var id: String {
         switch self {
-        case .meal(let meal): return meal.id
-        case .insight(let insight): return insight.id
-        case .workout(let workout): return workout.id
-        case .sleep(let sleep): return sleep.id
-        case .vibe(let vibe): return vibe.id
+        case .meal(let meal): return meal.id.uuidString
+        case .healthKitMeal(let meal): return meal.id.uuidString
+        case .eventGroup(let group): return group.id
+        case .insight(let insight): return insight.id.uuidString
+        case .workout(let workout): return workout.id.uuidString
+        case .sleep(let sleep): return sleep.id.uuidString
+        case .vibe(let vibe): return vibe.id.uuidString
         }
     }
     
     var timestamp: Date {
         switch self {
         case .meal(let meal): return meal.timestamp
+        case .healthKitMeal(let meal): return meal.timestamp
+        case .eventGroup(let group): return group.timestamp
         case .insight(let insight): return insight.timestamp
         case .workout(let workout): return workout.startTime
         case .sleep(let sleep): return sleep.startTime
@@ -373,6 +537,7 @@ struct TimelineItemRow: View {
     let item: TimelineItem
     var cardIndex: Int = 0
     var onMealTap: ((MealLog) -> Void)?
+    var onEventGroupTap: ((ConsumableEventGroup) -> Void)?
     var onInsightTap: ((InsightEvent) -> Void)?
     var onWorkoutTap: ((WorkoutLog) -> Void)?
     var onSleepTap: ((SleepLog) -> Void)?
@@ -384,6 +549,11 @@ struct TimelineItemRow: View {
             MealCard(meal: meal)
                 .riverCardStyle(index: cardIndex, type: .meal)
                 .onTapGesture { onMealTap?(meal) }
+        case .healthKitMeal(let meal):
+            HealthKitMealTimelineCard(meal: meal)
+        case .eventGroup(let group):
+            ConsumableEventTimelineCard(group: group)
+                .onTapGesture { onEventGroupTap?(group) }
         case .insight(let insight):
             InsightTimelineCard(insight: insight)
                 .riverCardStyle(index: cardIndex, type: .insight)
@@ -400,6 +570,62 @@ struct TimelineItemRow: View {
             VibeTimelineCard(vibe: vibe)
                 .riverCardStyle(index: cardIndex, type: .vibe)
                 .onTapGesture { onVibeTap?(vibe) }
+        }
+    }
+}
+
+// MARK: - Consumable Event Timeline Card
+
+struct ConsumableEventTimelineCard: View {
+    let group: ConsumableEventGroup
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            MonchIconView(token: group.kind.icon, size: 32)
+            
+            Text(group.timestamp, format: .dateTime.hour().minute())
+                .font(.Monch.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 50, alignment: .leading)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(group.displayTitle)
+                    .font(.Monch.headline)
+                
+                Text(group.count > 1 ? "Repeated entries grouped together" : "Atomic event")
+                    .font(.Monch.caption)
+                    .foregroundStyle(.secondary)
+                
+                Text(group.detailContextTag)
+                    .font(.Monch.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(accentColor.opacity(0.14))
+                    .clipShape(Capsule())
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(accentColor.opacity(0.18), lineWidth: 1)
+                )
+        )
+        .contentShape(Rectangle())
+    }
+    
+    private var accentColor: Color {
+        switch group.kind {
+        case .caffeine: return Color.Monch.sage
+        case .alcohol: return Color.Monch.coral
         }
     }
 }
@@ -435,8 +661,9 @@ struct MealCard: View {
                     if !meal.autoTags.isEmpty {
                         HStack(spacing: 2) {
                             ForEach(meal.autoTags, id: \.self) { tag in
-                                Text(tagEmoji(tag))
+                                Image(systemName: tagSymbol(tag))
                                     .font(.caption2)
+                                    .foregroundStyle(Color.Monch.sage)
                             }
                         }
                     }
@@ -474,17 +701,89 @@ struct MealCard: View {
         .contentShape(Rectangle())
     }
     
-    /// Convert tag name to emoji for compact display
-    private func tagEmoji(_ tag: String) -> String {
+    /// Convert tag name to SF Symbol for compact display
+    private func tagSymbol(_ tag: String) -> String {
         switch tag {
-        case "refeed": return "💪"
-        case "late-night": return "🌙"
-        case "breakfast": return "☀️"
-        case "lunch": return "🍽️"
-        case "dinner": return "🍴"
-        case "high-carb": return "🍞"
-        default: return "🏷️"
+        case "refeed": return "figure.strengthtraining.traditional"
+        case "late-night": return "moon.stars.fill"
+        case "breakfast": return "sunrise.fill"
+        case "lunch": return "sun.max.fill"
+        case "dinner": return "moon.fill"
+        case "high-carb": return "bolt.fill"
+        case "alcohol-event": return "wineglass.fill"
+        default: return "tag.fill"
         }
+    }
+}
+
+struct HealthKitMealTimelineCard: View {
+    let meal: ImportedMealEvent
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            MonchIconView(token: .asset("meal_kawaii"), size: 32)
+                .opacity(0.9)
+            
+            Text(meal.timestamp, format: .dateTime.hour().minute())
+                .font(.Monch.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 50, alignment: .leading)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(meal.title)
+                    .font(.Monch.headline)
+                
+                if meal.hasNutritionDetails {
+                    Text(importedSummary)
+                        .font(.Monch.caption)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Text(sourceLabel)
+                    .font(.Monch.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.Monch.periwinkle.opacity(0.18))
+                    .clipShape(Capsule())
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.Monch.periwinkle.opacity(0.18), lineWidth: 1)
+                )
+        )
+    }
+    
+    private var sourceLabel: String {
+        if let sourceName = meal.sourceName, !sourceName.isEmpty {
+            return "from \(sourceName)"
+        }
+        return "imported from Health"
+    }
+    
+    private var importedSummary: String {
+        var parts: [String] = []
+        
+        if meal.calories > 0 {
+            parts.append("\(Int(meal.calories.rounded())) kcal")
+        }
+        if meal.carbs > 0 {
+            parts.append("\(Int(meal.carbs.rounded()))g carbs")
+        }
+        if meal.protein > 0 {
+            parts.append("\(Int(meal.protein.rounded()))g protein")
+        }
+        if meal.fat > 0 {
+            parts.append("\(Int(meal.fat.rounded()))g fat")
+        }
+        
+        return parts.isEmpty ? "Imported meal event" : parts.joined(separator: " • ")
     }
 }
 
@@ -586,11 +885,7 @@ struct WorkoutTimelineCard: View {
     var body: some View {
         HStack(spacing: 12) {
             // Kawaii workout icon
-            Image("workout_kawaii")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 36, height: 36)
-                .accessibilityLabel("Workout")
+            MonchIconView(token: workout.category.iconToken, size: 32)
             
             // Time
             Text(workout.startTime, format: .dateTime.hour().minute())
@@ -715,9 +1010,7 @@ struct VibeTimelineCard: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
             
-            // Emoji
-            Text(vibe.emoji)
-                .font(.title2)
+            MonchIconView(token: .symbol(vibe.symbolName), size: 24, tint: Color.Monch.sage)
             
             // Content
             VStack(alignment: .leading, spacing: 4) {
@@ -782,7 +1075,7 @@ private struct SleepStagePill: View {
     }
 }
 
-// MARK: - Food Logger Placeholder
+// MARK: - Meal Event Placeholder
 
 struct FoodLoggerPlaceholder: View {
     @Environment(\.dismiss) private var dismiss
@@ -790,11 +1083,11 @@ struct FoodLoggerPlaceholder: View {
     var body: some View {
         NavigationStack {
             ContentUnavailableView(
-                "Food Logger",
-                systemImage: "magnifyingglass",
-                description: Text("Coming in Sprint 3")
+                "Meal Events",
+                systemImage: "fork.knife",
+                description: Text("Use the meal event flow instead.")
             )
-            .navigationTitle("Log Meal")
+            .navigationTitle("Log Meal Event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

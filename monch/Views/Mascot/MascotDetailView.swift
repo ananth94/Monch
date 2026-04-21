@@ -176,7 +176,7 @@ struct MascotDetailView: View {
     
     private var primaryAction: (label: String, icon: String)? {
         switch mood {
-        case .neutral, .hungry: return ("Log Meal", "fork.knife")
+        case .neutral, .hungry: return ("Log Meal Event", "fork.knife")
         case .spiking: return ("Add Walk", "figure.walk")
         case .crashing: return ("Quick Snack", "carrot")
         case .sleepy: return ("Close Kitchen", "moon.zzz")

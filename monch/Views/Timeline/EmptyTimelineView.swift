@@ -50,7 +50,7 @@ struct EmptyTimelineView: View {
                             .font(.Monch.title2)
                             .multilineTextAlignment(.center)
                         
-                        Text("Log your first meal to start your journey")
+                        Text("Log your first meal event to start your journey")
                             .font(.Monch.body)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -61,7 +61,7 @@ struct EmptyTimelineView: View {
                     Button(action: onLogMeal) {
                         HStack {
                             Image(systemName: "plus.circle.fill")
-                            Text("Start Logging")
+                            Text("Log Meal Event")
                         }
                         .font(.Monch.headline)
                         .foregroundStyle(.white)

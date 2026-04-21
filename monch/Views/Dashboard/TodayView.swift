@@ -6,13 +6,16 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct TodayView: View {
+    @Environment(\.modelContext) private var modelContext
     let summary: TodaySummary
+    var selectedDate: Date = Date()
     
     @ObservedObject private var insightEngine = InsightEngine.shared
     @State private var selectedInsight: InsightEvent?
-    @State private var showingFoodLogger = false
+    @State private var showingMealLogger = false
     
     var body: some View {
         ScrollView {
@@ -35,7 +38,7 @@ struct TodayView: View {
                     }
                     
                     // Macro Breakdown
-                    if summary.mealCount > 0 {
+                    if summary.macros.totalCalories > 0 {
                         MacroBreakdownRing(macros: summary.macros)
                             .padding(.horizontal)
                     }
@@ -49,8 +52,13 @@ struct TodayView: View {
         .sheet(item: $selectedInsight) { insight in
             InsightCardView(insight: insight)
         }
-        .sheet(isPresented: $showingFoodLogger) {
-            FoodSearchView { _ in }
+        .sheet(isPresented: $showingMealLogger) {
+            MealEventLogView { meal in
+                modelContext.insert(meal)
+                Task { @MainActor in
+                    await InsightEngine.shared.analyzeMeal(meal, in: modelContext)
+                }
+            }
         }
     }
     
@@ -59,14 +67,14 @@ struct TodayView: View {
     private var quickStatsSection: some View {
         HStack(spacing: Spacing.md) {
             QuickStatPill(
-                icon: "🍽️",
-                value: "\(Int(summary.calories))",
-                label: "kcal"
+                icon: .asset("meal_kawaii"),
+                value: "\(summary.mealCount)",
+                label: summary.mealCount == 1 ? "meal" : "meals"
             )
             
             if let sleep = summary.sleepDuration {
                 QuickStatPill(
-                    icon: "😴",
+                    icon: .asset("sleep_kawaii"),
                     value: formatDuration(sleep),
                     label: "sleep"
                 )
@@ -74,7 +82,7 @@ struct TodayView: View {
             
             if summary.zone2Minutes > 0 {
                 QuickStatPill(
-                    icon: "🏃",
+                    icon: .asset("workout_kawaii"),
                     value: "\(summary.zone2Minutes)m",
                     label: "zone 2"
                 )
@@ -87,7 +95,7 @@ struct TodayView: View {
     
     private var insightsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("today's insights")
+            Text(selectedDate.isToday ? "today's insights" : "day insights")
                 .font(.Monch.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
@@ -106,19 +114,17 @@ struct TodayView: View {
     
     private var emptyState: some View {
         VStack(spacing: Spacing.lg) {
-            Image(systemName: "fork.knife.circle")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+            MonchIconView(token: .asset("meal_kawaii"), size: 60)
             
-            Text("Your metabolic story starts\nwith your first meal.")
+            Text(emptyStateCopy)
                 .font(.Monch.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             
             Button {
-                showingFoodLogger = true
+                showingMealLogger = true
             } label: {
-                Label("Log Breakfast", systemImage: "plus")
+                Label("Log a Meal", systemImage: "plus")
                     .font(.Monch.callout)
                     .fontWeight(.semibold)
             }
@@ -135,19 +141,25 @@ struct TodayView: View {
         let minutes = (Int(interval) % 3600) / 60
         return "\(hours)h \(minutes)m"
     }
+    
+    private var emptyStateCopy: String {
+        if selectedDate.isToday {
+            return "Your metabolic story starts\nwith your first meal event."
+        }
+        return "No day data yet for \(selectedDate.formatted(date: .abbreviated, time: .omitted))."
+    }
 }
 
 // MARK: - Quick Stat Pill
 
 private struct QuickStatPill: View {
-    let icon: String
+    let icon: MonchIconToken
     let value: String
     let label: String
     
     var body: some View {
         VStack(spacing: 4) {
-            Text(icon)
-                .font(.title2)
+            MonchIconView(token: icon, size: 30)
             Text(value)
                 .font(.Monch.callout)
                 .fontWeight(.semibold)
@@ -171,8 +183,7 @@ private struct InsightRowCard: View {
     
     var body: some View {
         HStack(spacing: Spacing.md) {
-            Text(insight.type.icon)
-                .font(.title2)
+            MonchIconView(token: insight.type.iconToken, size: 28)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(insight.type.displayTitle)

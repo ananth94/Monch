@@ -142,6 +142,15 @@ enum ExerciseCategory: String, CaseIterable {
         case .other: return "💪"
         }
     }
+
+    var iconToken: MonchIconToken {
+        switch self {
+        case .strength:
+            return .asset("insight_recovery_kawaii")
+        default:
+            return .asset("workout_kawaii")
+        }
+    }
     
     /// Initialize from HKWorkoutActivityType raw value
     init(fromActivityTypeRaw raw: UInt) {
@@ -272,13 +281,13 @@ extension WorkoutLog {
     }
     
     /// Decode HR zone breakdown from stored JSON
-    var hrZoneBreakdown: HRZoneBreakdown? {
+    @MainActor var hrZoneBreakdown: HRZoneBreakdown? {
         guard let data = hrZoneBreakdownData else { return nil }
         return try? JSONDecoder().decode(HRZoneBreakdown.self, from: data)
     }
     
     /// Encode and store HR zone breakdown as JSON
-    func setHRZoneBreakdown(_ breakdown: HRZoneBreakdown) {
+    @MainActor func setHRZoneBreakdown(_ breakdown: HRZoneBreakdown) {
         hrZoneBreakdownData = try? JSONEncoder().encode(breakdown)
         dominantHRZone = breakdown.dominantZone
     }

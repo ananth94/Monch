@@ -14,7 +14,7 @@ struct CardDetailShell<Content: View>: View {
     // MARK: - Properties
     
     let title: String
-    let icon: String
+    let icon: MonchIconToken
     let timestamp: Date
     let contextTag: String?
     
@@ -32,7 +32,7 @@ struct CardDetailShell<Content: View>: View {
     
     public init(
         title: String,
-        icon: String,
+        icon: MonchIconToken,
         timestamp: Date,
         contextTag: String? = nil,
         mood: GradientMood = .neutral,
@@ -112,8 +112,7 @@ struct CardDetailShell<Content: View>: View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.sm) {
                 // Icon with subtle glow effect
-                Text(icon)
-                    .font(.title)
+                MonchIconView(token: icon, size: 30, tint: moodAccentColor)
                     .shadow(color: moodAccentColor.opacity(0.3), radius: 8)
                 
                 Text(title)
@@ -188,9 +187,9 @@ struct CardDetailShell<Content: View>: View {
 #Preview("Neutral Mood") {
     CardDetailShell(
         title: "Oatmeal with Banana",
-        icon: "🍽️",
+        icon: .asset("meal_kawaii"),
         timestamp: Date(),
-        contextTag: "🍞 High Carb",
+        contextTag: "High Carb",
         mood: .neutral,
         primaryActionLabel: "Save",
         onPrimaryAction: {},
@@ -208,9 +207,9 @@ struct CardDetailShell<Content: View>: View {
 #Preview("Acute Mood (Sugar Spike)") {
     CardDetailShell(
         title: "Sugar Spike Detected",
-        icon: "💡",
+        icon: .asset("insight_spike_kawaii"),
         timestamp: Date(),
-        contextTag: "🔶 Moderate",
+        contextTag: "Moderate",
         mood: .acute,
         primaryActionLabel: nil,
         onPrimaryAction: nil,
@@ -224,9 +223,9 @@ struct CardDetailShell<Content: View>: View {
 #Preview("Recovery Mood (Anabolic)") {
     CardDetailShell(
         title: "Morning Run",
-        icon: "🏃",
+        icon: .asset("workout_kawaii"),
         timestamp: Date(),
-        contextTag: "💪 Zone 2",
+        contextTag: "Zone 2",
         mood: .recovery,
         onDelete: {}
     ) {

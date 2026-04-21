@@ -19,7 +19,7 @@ struct WeekView: View {
     @ObservedObject private var insightEngine = InsightEngine.shared
     
     @State private var selectedPattern: Pattern?
-    
+    var healthKitMealCountsByDay: [Date: Int] = [:]
     var onSeeEntries: (() -> Void)?
     
     var body: some View {
@@ -29,7 +29,7 @@ struct WeekView: View {
                 MascotHeader(mood: insightEngine.currentMood) { }
                     .padding(.horizontal)
                 
-                if weeklySummary.dailyData.contains(where: { $0.calories > 0 }) {
+                if weeklySummary.dailyData.contains(where: \.hasAnySignal) {
                     // Weekly Bar Chart
                     WeeklyBarChart(dailyData: weeklySummary.dailyData)
                         .padding(.horizontal)
@@ -65,12 +65,13 @@ struct WeekView: View {
             meals: meals,
             insights: insights.filter { !$0.isDismissed },
             workouts: workouts,
-            sleepLogs: sleepLogs
+            sleepLogs: sleepLogs,
+            healthKitMealCountsByDay: healthKitMealCountsByDay
         )
     }
     
     private var daysWithData: Int {
-        weeklySummary.dailyData.filter { $0.calories > 0 }.count
+        weeklySummary.dailyData.filter(\.hasAnySignal).count
     }
     
     // MARK: - Trends Section
@@ -104,19 +105,19 @@ struct WeekView: View {
                 InsightSummaryPill(
                     count: weeklySummary.spikeCount,
                     label: "Spikes",
-                    icon: "⚡",
+                    icon: .asset("insight_spike_kawaii"),
                     color: Color.Monch.coral
                 )
                 InsightSummaryPill(
                     count: weeklySummary.spongeCount,
                     label: "Sponges",
-                    icon: "💪",
+                    icon: .asset("insight_recovery_kawaii"),
                     color: Color.Monch.sage
                 )
                 InsightSummaryPill(
                     count: weeklySummary.debtCount,
                     label: "Debts",
-                    icon: "🌙",
+                    icon: .asset("sleep_kawaii"),
                     color: Color.Monch.periwinkle
                 )
             }
@@ -174,13 +175,12 @@ struct WeekView: View {
 private struct InsightSummaryPill: View {
     let count: Int
     let label: String
-    let icon: String
+    let icon: MonchIconToken
     let color: Color
     
     var body: some View {
         VStack(spacing: 4) {
-            Text(icon)
-                .font(.title3)
+            MonchIconView(token: icon, size: 28)
             Text("\(count)")
                 .font(.Monch.headline)
                 .fontWeight(.bold)

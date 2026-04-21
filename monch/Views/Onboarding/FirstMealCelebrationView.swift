@@ -2,7 +2,7 @@
 //  FirstMealCelebrationView.swift
 //  monch
 //
-//  Celebration modal shown after user logs their first meal.
+//  Celebration modal shown after user logs their first meal event.
 //
 
 import SwiftUI
@@ -37,11 +37,11 @@ struct FirstMealCelebrationView: View {
                     .scaleEffect(animateIn ? 1 : 0.5)
                     .rotationEffect(.degrees(animateIn ? 0 : -10))
                 
-                Text("Monch's First Bite!")
+                Text("Monch Is Awake!")
                     .font(.Monch.title)
                     .foregroundStyle(.primary)
                 
-                Text("I'm learning your patterns now. Keep logging and I'll start noticing things about your metabolism.")
+                Text("I'm learning your patterns now. Keep logging meal events and I'll start noticing things about your metabolism.")
                     .font(.Monch.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

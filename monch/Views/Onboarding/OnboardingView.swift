@@ -107,7 +107,7 @@ struct OnboardingView: View {
                 .font(.Monch.largeTitle)
                 .foregroundStyle(.primary)
             
-            Text("I'm your metabolic companion. I'll help you understand how food affects your energy.")
+            Text("I'm your metabolic companion. I'll help you understand how meals, timing, and recovery affect your energy.")
                 .font(.Monch.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -190,22 +190,22 @@ struct OnboardingView: View {
                 .font(.Monch.largeTitle)
                 .foregroundStyle(.primary)
             
-            Text("What did you have for breakfast today? I'll start learning your patterns.")
+            Text("Log your first meal event and I'll start learning your patterns.")
                 .font(.Monch.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Spacing.xl)
             
-            // Popular first meals
+            // Example meal events
             VStack(spacing: Spacing.sm) {
-                Text("Popular first meals:")
+                Text("Examples:")
                     .font(.Monch.caption)
                     .foregroundStyle(.secondary)
                 
                 HStack(spacing: Spacing.sm) {
-                    quickMealChip("☕️ Coffee")
-                    quickMealChip("🥣 Oatmeal")
-                    quickMealChip("🍳 Eggs")
+                    quickMealChip("Breakfast")
+                    quickMealChip("Lunch")
+                    quickMealChip("Dinner")
                 }
             }
             .padding(.top, Spacing.md)
@@ -252,7 +252,7 @@ struct OnboardingView: View {
         case .healthKit:
             return "Connect Health"
         case .firstMeal:
-            return "Log Breakfast"
+            return "Log Meal Event"
         }
     }
     

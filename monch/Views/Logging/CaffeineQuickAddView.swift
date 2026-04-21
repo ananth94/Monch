@@ -2,7 +2,7 @@
 //  CaffeineQuickAddView.swift
 //  monch
 //
-//  One-tap caffeine logging with preset amounts.
+//  Event-based caffeine logging with simple presets.
 //
 
 import SwiftUI
@@ -14,15 +14,13 @@ struct CaffeineQuickAddView: View {
     
     var onCaffeineLogged: ((MealLog) -> Void)?
     
-    private let presets: [(emoji: String, name: String, caffeine: Double, calories: Double)] = [
-        ("☕", "Espresso", 63, 3),
-        ("☕", "Coffee", 95, 2),
-        ("🥤", "Americano", 95, 10),
-        ("🍵", "Green Tea", 28, 2),
-        ("🧋", "Matcha Latte", 70, 120),
-        ("🥤", "Energy Drink", 80, 110),
-        ("🥤", "Cold Brew", 200, 5),
-        ("💊", "Caffeine Pill", 200, 0),
+    private let presets: [(icon: MonchIconToken, name: String)] = [
+        (.asset("coffee_kawaii"), "Coffee"),
+        (.asset("coffee_kawaii"), "Espresso"),
+        (.asset("tea_kawaii"), "Tea"),
+        (.asset("tea_kawaii"), "Matcha"),
+        (.symbol("bolt.fill"), "Energy Drink"),
+        (.symbol("pills.fill"), "Caffeine"),
     ]
     
     var body: some View {
@@ -40,7 +38,7 @@ struct CaffeineQuickAddView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Quick Caffeine")
+            .navigationTitle("Log Caffeine Event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -54,14 +52,12 @@ struct CaffeineQuickAddView: View {
     
     private var headerSection: some View {
         VStack(spacing: Spacing.sm) {
-            Image(systemName: "cup.and.saucer.fill")
-                .font(.system(size: 50))
-                .foregroundStyle(Color.Monch.coral)
+            MonchIconView(token: .asset("coffee_kawaii"), size: 60)
             
-            Text("One Tap Coffee")
+            Text("Log a caffeine event")
                 .font(.Monch.headline)
             
-            Text("Tap to log. We'll track timing for the Caffeine Jitter insight.")
+            Text("Tap to log timing only. Monch will use recency and biometrics instead of milligram math.")
                 .font(.Monch.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -78,14 +74,13 @@ struct CaffeineQuickAddView: View {
                     logCaffeine(preset)
                 } label: {
                     VStack(spacing: Spacing.sm) {
-                        Text(preset.emoji)
-                            .font(.system(size: 36))
+                        MonchIconView(token: preset.icon, size: 40)
                         
                         Text(preset.name)
                             .font(.Monch.headline)
                             .foregroundStyle(.primary)
                         
-                        Text("\(Int(preset.caffeine))mg caffeine")
+                        Text("Event only")
                             .font(.Monch.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -129,13 +124,13 @@ struct CaffeineQuickAddView: View {
     
     // MARK: - Actions
     
-    private func logCaffeine(_ preset: (emoji: String, name: String, caffeine: Double, calories: Double)) {
+    private func logCaffeine(_ preset: (icon: MonchIconToken, name: String)) {
         let meal = MealLog(
             timestamp: Date(),
             name: preset.name,
             mealType: .afternoonSnack,
-            calories: preset.calories,
-            caffeine: preset.caffeine
+            caffeine: 1,
+            tags: ["caffeine-event"]
         )
         
         modelContext.insert(meal)
