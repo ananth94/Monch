@@ -15,7 +15,7 @@ struct ExerciseCardView: View {
     var body: some View {
         CardDetailShell(
             title: workout.activityName,
-            icon: workout.category.icon,
+            icon: workout.category.iconToken,
             timestamp: workout.startTime,
             contextTag: workout.contextTag,
             mood: .recovery,
@@ -166,7 +166,7 @@ struct ExerciseCardView: View {
                     .foregroundStyle(.secondary)
                 
                 MonchPrimaryButton("Log Protein", icon: "fork.knife") {
-                    // TODO: Open food logger with protein filter
+                    // TODO: Open a meal event flow with protein-focused guidance
                 }
                 .padding(.top, Spacing.xs)
             }

@@ -15,8 +15,7 @@ struct StreakCard: View {
     var body: some View {
         HStack(spacing: Spacing.md) {
             // Icon
-            Text(streak.type.icon)
-                .font(.title)
+            MonchIconView(token: streak.type.iconToken, size: 32)
             
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 // Count and type

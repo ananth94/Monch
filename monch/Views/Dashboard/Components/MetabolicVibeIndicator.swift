@@ -15,7 +15,7 @@ struct MetabolicVibeIndicator: View {
     
     var body: some View {
         VStack(spacing: Spacing.md) {
-            // Emoji and ring
+            // Icon and ring
             ZStack {
                 // Background ring
                 Circle()
@@ -33,9 +33,7 @@ struct MetabolicVibeIndicator: View {
                     .rotationEffect(.degrees(-90))
                     .animation(.spring(duration: 0.8, bounce: 0.3), value: appeared)
                 
-                // Emoji
-                Text(tier.emoji)
-                    .font(.system(size: 50))
+                MonchIconView(token: .symbol(tier.symbolName), size: 42, tint: tierColor)
                     .scaleEffect(appeared ? 1 : 0.5)
                     .animation(.spring(duration: 0.5, bounce: 0.4).delay(0.3), value: appeared)
             }

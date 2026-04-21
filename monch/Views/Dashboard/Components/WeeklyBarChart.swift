@@ -80,16 +80,25 @@ struct WeeklyBarChart: View {
                 
                 Spacer()
                 
-                Text(day.vibe.emoji)
+                Image(systemName: day.vibe.symbolName)
+                    .foregroundStyle(Color.Monch.sage)
                 Text(day.vibe.name)
                     .font(.Monch.caption)
                     .foregroundStyle(.secondary)
             }
             
-            HStack(spacing: Spacing.lg) {
-                MacroStat(color: Color.Monch.coral, label: "Carbs", value: "\(Int(day.macros.carbs))g")
-                MacroStat(color: Color.Monch.sage, label: "Protein", value: "\(Int(day.macros.protein))g")
-                MacroStat(color: Color.Monch.periwinkle, label: "Fat", value: "\(Int(day.macros.fat))g")
+            if day.hasNutritionData {
+                HStack(spacing: Spacing.lg) {
+                    MacroStat(color: Color.Monch.coral, label: "Carbs", value: "\(Int(day.macros.carbs))g")
+                    MacroStat(color: Color.Monch.sage, label: "Protein", value: "\(Int(day.macros.protein))g")
+                    MacroStat(color: Color.Monch.periwinkle, label: "Fat", value: "\(Int(day.macros.fat))g")
+                }
+            } else if day.hasAnySignal {
+                HStack(spacing: Spacing.lg) {
+                    MacroStat(color: Color.Monch.peach, label: "Meal Events", value: "\(day.mealCount)")
+                    MacroStat(color: Color.Monch.sage, label: "Workouts", value: "\(day.workoutCount)")
+                    MacroStat(color: Color.Monch.periwinkle, label: "Sleep", value: day.hasSleepData ? "Yes" : "No")
+                }
             }
         }
         .padding(.top, Spacing.sm)
@@ -106,13 +115,18 @@ private struct DayBar: View {
     let appeared: Bool
     
     private var barHeight: CGFloat {
-        guard maxCalories > 0 else { return 0 }
-        let ratio = min(day.calories / maxCalories, 1.0)
-        return CGFloat(ratio) * 100
+        if day.hasNutritionData {
+            guard maxCalories > 0 else { return 0 }
+            let ratio = min(day.calories / maxCalories, 1.0)
+            return CGFloat(ratio) * 100
+        }
+        
+        let ratio = min(Double(day.signalCount) / 4.0, 1.0)
+        return CGFloat(max(0.22, ratio * 0.55)) * 100
     }
     
     private var hasData: Bool {
-        day.calories > 0
+        day.hasAnySignal
     }
     
     var body: some View {
@@ -126,23 +140,38 @@ private struct DayBar: View {
                 
                 if hasData {
                     // Stacked macro bar
-                    VStack(spacing: 0) {
-                        // Fat (top)
+                    if day.hasNutritionData {
+                        VStack(spacing: 0) {
+                            // Fat (top)
+                            RoundedRectangle(cornerRadius: CornerRadius.sm)
+                                .fill(Color.Monch.periwinkle.opacity(0.8))
+                                .frame(height: appeared ? barHeight * day.macros.fatPercent : 0)
+                            
+                            // Protein (middle)
+                            Rectangle()
+                                .fill(Color.Monch.sage.opacity(0.8))
+                                .frame(height: appeared ? barHeight * day.macros.proteinPercent : 0)
+                            
+                            // Carbs (bottom)
+                            RoundedRectangle(cornerRadius: CornerRadius.sm)
+                                .fill(Color.Monch.coral.opacity(0.8))
+                                .frame(height: appeared ? barHeight * day.macros.carbsPercent : 0)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.sm))
+                    } else {
                         RoundedRectangle(cornerRadius: CornerRadius.sm)
-                            .fill(Color.Monch.periwinkle.opacity(0.8))
-                            .frame(height: appeared ? barHeight * day.macros.fatPercent : 0)
-                        
-                        // Protein (middle)
-                        Rectangle()
-                            .fill(Color.Monch.sage.opacity(0.8))
-                            .frame(height: appeared ? barHeight * day.macros.proteinPercent : 0)
-                        
-                        // Carbs (bottom)
-                        RoundedRectangle(cornerRadius: CornerRadius.sm)
-                            .fill(Color.Monch.coral.opacity(0.8))
-                            .frame(height: appeared ? barHeight * day.macros.carbsPercent : 0)
+                            .fill(Color.Monch.peach.opacity(0.85))
+                            .frame(height: appeared ? barHeight : 0)
+                            .overlay(alignment: .top) {
+                                if day.signalCount > 1 {
+                                    Text("\(day.signalCount)")
+                                        .font(.Monch.caption2)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(Color.Monch.labelPrimary)
+                                        .padding(.top, 6)
+                                }
+                            }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.sm))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -183,13 +212,13 @@ private struct MacroStat: View {
 
 #Preview {
     WeeklyBarChart(dailyData: [
-        DailySummary(date: Date().addingTimeInterval(-6*86400), calories: 1800, vibe: .balanced, macros: MacroBreakdown(carbs: 200, protein: 100, fat: 60)),
-        DailySummary(date: Date().addingTimeInterval(-5*86400), calories: 2100, vibe: .thriving, macros: MacroBreakdown(carbs: 220, protein: 120, fat: 70)),
-        DailySummary(date: Date().addingTimeInterval(-4*86400), calories: 1600, vibe: .steady, macros: MacroBreakdown(carbs: 180, protein: 80, fat: 55)),
-        DailySummary(date: Date().addingTimeInterval(-3*86400), calories: 1900, vibe: .balanced, macros: MacroBreakdown(carbs: 200, protein: 110, fat: 65)),
-        DailySummary(date: Date().addingTimeInterval(-2*86400), calories: 2200, vibe: .learning, macros: MacroBreakdown(carbs: 280, protein: 90, fat: 75)),
-        DailySummary(date: Date().addingTimeInterval(-1*86400), calories: 1700, vibe: .steady, macros: MacroBreakdown(carbs: 190, protein: 95, fat: 50)),
-        DailySummary(date: Date(), calories: 1400, vibe: .balanced, macros: MacroBreakdown(carbs: 150, protein: 80, fat: 45))
+        DailySummary(date: Date().addingTimeInterval(-6*86400), calories: 1800, vibe: .balanced, macros: MacroBreakdown(carbs: 200, protein: 100, fat: 60), mealCount: 3, insightCount: 1, workoutCount: 0, hasSleepData: true),
+        DailySummary(date: Date().addingTimeInterval(-5*86400), calories: 2100, vibe: .thriving, macros: MacroBreakdown(carbs: 220, protein: 120, fat: 70), mealCount: 4, insightCount: 2, workoutCount: 1, hasSleepData: true),
+        DailySummary(date: Date().addingTimeInterval(-4*86400), calories: 0, vibe: .steady, macros: .empty, mealCount: 2, insightCount: 0, workoutCount: 0, hasSleepData: false),
+        DailySummary(date: Date().addingTimeInterval(-3*86400), calories: 1900, vibe: .balanced, macros: MacroBreakdown(carbs: 200, protein: 110, fat: 65), mealCount: 3, insightCount: 1, workoutCount: 1, hasSleepData: true),
+        DailySummary(date: Date().addingTimeInterval(-2*86400), calories: 2200, vibe: .learning, macros: MacroBreakdown(carbs: 280, protein: 90, fat: 75), mealCount: 4, insightCount: 2, workoutCount: 0, hasSleepData: true),
+        DailySummary(date: Date().addingTimeInterval(-1*86400), calories: 0, vibe: .steady, macros: .empty, mealCount: 1, insightCount: 0, workoutCount: 1, hasSleepData: false),
+        DailySummary(date: Date(), calories: 1400, vibe: .balanced, macros: MacroBreakdown(carbs: 150, protein: 80, fat: 45), mealCount: 2, insightCount: 1, workoutCount: 0, hasSleepData: true)
     ])
     .padding()
 }

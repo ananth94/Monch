@@ -508,18 +508,16 @@ class InsightEngine: ObservableObject {
     // MARK: - Caffeine Jitter Detection (P1)
     
     /// Detects caffeine-induced elevated heart rate (not anxiety)
-    /// Algorithm: >100mg caffeine in last 4h + HR elevated + stable HRV
+    /// Algorithm: recent caffeine event + HR elevated + stable HRV
     /// Sprint 12: Uses HRV stability to distinguish caffeine from stress
     func detectCaffeineJitter(for meals: [MealLog]) async -> InsightEvent? {
         let fourHoursAgo = Date().addingTimeInterval(-4 * 3600)
         
-        // Sum caffeine from recent meals
-        let recentCaffeine = meals
+        let recentCaffeineEvents = meals
             .filter { $0.timestamp > fourHoursAgo }
-            .compactMap { $0.caffeine }
-            .reduce(0, +)
+            .filter { ($0.caffeine ?? 0) > 0 || $0.contextTags.contains("caffeine-event") }
         
-        guard recentCaffeine > 100 else { return nil }
+        guard !recentCaffeineEvents.isEmpty else { return nil }
         
         // Check for elevated HR
         let recentRange = Date().addingTimeInterval(-1800)...Date()
@@ -556,8 +554,8 @@ class InsightEngine: ObservableObject {
                     timestamp: Date(),
                     type: .caffeineJitter,
                     severity: min((avgHR - threshold) / 30.0, 1.0),
-                    message: "Alert mode activated! That's \(Int(recentCaffeine))mg caffeine working. HRV stable—this is focus, not stress.",
-                    associatedMealID: meals.first?.id
+                    message: "Alert mode activated. A recent caffeine event lines up with elevated heart rate, while HRV stays steady.",
+                    associatedMealID: recentCaffeineEvents.first?.id
                 )
             } else if avgHR > threshold + 10 {
                 // Very elevated HR even without HRV data
@@ -565,8 +563,8 @@ class InsightEngine: ObservableObject {
                     timestamp: Date(),
                     type: .caffeineJitter,
                     severity: min((avgHR - threshold) / 30.0, 0.6),
-                    message: "Caffeine is in your system (\(Int(recentCaffeine))mg). Heart rate elevated by +\(Int(avgHR - restingHR)) bpm.",
-                    associatedMealID: meals.first?.id
+                    message: "A recent caffeine event may be driving this elevated heart rate. You're running about +\(Int(avgHR - restingHR)) bpm above baseline.",
+                    associatedMealID: recentCaffeineEvents.first?.id
                 )
             }
         } catch {
@@ -622,7 +620,7 @@ class InsightEngine: ObservableObject {
             guard sleepLogs.count >= 4 else { return nil } // Relaxed to 4 days
             
             // Calculate average deep sleep
-            let deepSleepMinutes = sleepLogs.compactMap { Double($0.deepSleepMinutes ?? 0) }.reduce(0, +)
+            let deepSleepMinutes = sleepLogs.map { Double($0.deepSleepMinutes) }.reduce(0, +)
             let avgDeepSleep = deepSleepMinutes / Double(sleepLogs.count)
             
             guard avgDeepSleep < 45 else { return nil }
@@ -989,14 +987,19 @@ class InsightEngine: ObservableObject {
                 let hour = calendar.component(.hour, from: meal.timestamp)
                 return hour >= 20
             }
+            let hasAlcoholEvent = meals.contains { $0.contextTags.contains("alcohol-event") }
             
-            // >35% suppression WITHOUT late meal = likely alcohol (raised from 30% to reduce false positives)
-            if suppression > 0.35 && !hasLateMeal {
+            // Explicit alcohol event lowers the confirmation threshold slightly.
+            let threshold = hasAlcoholEvent ? 0.25 : 0.35
+            
+            if suppression > threshold && !hasLateMeal {
                 return InsightEvent(
                     timestamp: Date(),
                     type: .alcoholImpact,
                     severity: min(suppression, 1.0),
-                    message: "Overnight HRV was \(Int(suppression * 100))% below normal. If you drank last night, that's likely why. (Illness or travel could also cause this.)",
+                    message: hasAlcoholEvent
+                        ? "Overnight HRV was \(Int(suppression * 100))% below normal, and you logged alcohol last night. That's the most likely driver."
+                        : "Overnight HRV was \(Int(suppression * 100))% below normal. If you drank last night, that's a likely explanation. Illness or travel could also cause this.",
                     associatedMealID: nil
                 )
             }

@@ -30,19 +30,20 @@ enum AppTab: String, CaseIterable {
 
 struct MainTabView: View {
     @State private var selectedTab: AppTab = .timeline
-    @State private var timelineDate: Date? = nil
+    @State private var selectedDate: Date = Date()
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            TimelineView()
+            TimelineView(selectedDate: $selectedDate)
                 .tabItem {
                     Label(AppTab.timeline.title, systemImage: AppTab.timeline.icon)
                 }
                 .tag(AppTab.timeline)
             
             DashboardView(
+                selectedDate: $selectedDate,
                 onNavigateToDate: { date in
-                    timelineDate = date
+                    selectedDate = date
                     selectedTab = .timeline
                 }
             )

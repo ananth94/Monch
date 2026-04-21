@@ -18,6 +18,7 @@ struct MonthView: View {
     @ObservedObject private var dataService = DashboardDataService.shared
     @ObservedObject private var insightEngine = InsightEngine.shared
     
+    var healthKitMealCountsByDay: [Date: Int] = [:]
     var onNavigateToDate: ((Date) -> Void)?
     
     var body: some View {
@@ -62,7 +63,8 @@ struct MonthView: View {
             meals: meals,
             insights: insights.filter { !$0.isDismissed },
             workouts: workouts,
-            sleepLogs: sleepLogs
+            sleepLogs: sleepLogs,
+            healthKitMealCountsByDay: healthKitMealCountsByDay
         )
     }
     

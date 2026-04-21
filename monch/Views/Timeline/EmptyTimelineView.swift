@@ -2,7 +2,7 @@
 //  EmptyTimelineView.swift
 //  monch
 //
-//  Ghost Timeline empty state prompting user to log first meal.
+//  Ghost Timeline empty state prompting user to log a first meal event.
 //  Features animated Monch and call-to-action.
 //
 
@@ -32,7 +32,7 @@ struct EmptyTimelineView: View {
                     .font(.Monch.title2)
                     .multilineTextAlignment(.center)
                 
-                Text("Log your first meal to wake up Monch")
+                Text("Log your first meal event to wake up Monch")
                     .font(.Monch.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -43,7 +43,7 @@ struct EmptyTimelineView: View {
             Button(action: onLogMeal) {
                 HStack {
                     Image(systemName: "plus.circle.fill")
-                    Text("Log Meal")
+                    Text("Log Meal Event")
                 }
                 .font(.Monch.headline)
                 .foregroundStyle(.white)

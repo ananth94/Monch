@@ -77,8 +77,7 @@ struct SleepLogView: View {
     
     private var durationPreview: some View {
         VStack(spacing: Spacing.xs) {
-            Text("😴")
-                .font(.system(size: 50))
+            MonchIconView(token: .asset("sleep_kawaii"), size: 56)
             
             Text(sleepDurationFormatted)
                 .font(.Monch.title2)

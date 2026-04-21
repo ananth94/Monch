@@ -20,13 +20,11 @@ struct VibeCheckView: View {
     @State private var note: String = ""
     @State private var isAnimatingIn = false
     
-    private let emojis = ["😩", "😕", "😐", "🙂", "😄"]
-    
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Spacing.xl) {
-                    // Header with overall emoji
+                    // Header with overall state
                     headerSection
                         .opacity(isAnimatingIn ? 1 : 0)
                         .offset(y: isAnimatingIn ? 0 : 20)
@@ -71,8 +69,9 @@ struct VibeCheckView: View {
     
     private var headerSection: some View {
         VStack(spacing: Spacing.sm) {
-            Text(overallEmoji)
-                .font(.system(size: 80))
+            Image(systemName: overallSymbolName)
+                .font(.system(size: 64, weight: .medium))
+                .foregroundStyle(Color.Monch.sage)
                 .scaleEffect(isAnimatingIn ? 1 : 0.5)
                 .animation(.spring(duration: 0.8).delay(0.2), value: isAnimatingIn)
             
@@ -87,10 +86,15 @@ struct VibeCheckView: View {
         .padding(.vertical, Spacing.lg)
     }
     
-    private var overallEmoji: String {
+    private var overallSymbolName: String {
         let avg = Double(energy + focus + mood) / 3.0
-        let index = min(4, max(0, Int(round(avg)) - 1))
-        return emojis[index]
+        switch avg {
+        case 0..<1.5: return "cloud.rain.fill"
+        case 1.5..<2.5: return "cloud.fill"
+        case 2.5..<3.5: return "circle.fill"
+        case 3.5..<4.5: return "sun.max.fill"
+        default: return "sparkles"
+        }
     }
     
     // MARK: - Slider
@@ -108,11 +112,11 @@ struct VibeCheckView: View {
                 Text(label)
                     .font(.Monch.headline)
                 Spacer()
-                Text(emojis[value.wrappedValue - 1])
-                    .font(.title2)
+                Image(systemName: VibeCheck.symbolName(for: value.wrappedValue))
+                    .foregroundStyle(color)
             }
             
-            // Custom slider with emojis
+            // Custom slider with symbols
             HStack(spacing: 0) {
                 ForEach(1...5, id: \.self) { level in
                     Button {
@@ -121,8 +125,9 @@ struct VibeCheckView: View {
                         }
                         HapticManager.shared.play(.selection)
                     } label: {
-                        Text(emojis[level - 1])
-                            .font(value.wrappedValue == level ? .title : .title2)
+                        Image(systemName: VibeCheck.symbolName(for: level))
+                            .font(value.wrappedValue == level ? .title2 : .body)
+                            .foregroundStyle(color)
                             .opacity(value.wrappedValue == level ? 1 : 0.4)
                             .scaleEffect(value.wrappedValue == level ? 1.2 : 1)
                             .frame(maxWidth: .infinity)
@@ -151,7 +156,7 @@ struct VibeCheckView: View {
                 .font(.Monch.caption)
                 .foregroundStyle(.secondary)
             
-            TextField("e.g., Had coffee an hour ago", text: $note)
+            TextField("e.g., Had a caffeine event an hour ago", text: $note)
                 .textFieldStyle(.plain)
                 .padding()
                 .background(

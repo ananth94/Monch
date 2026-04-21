@@ -9,6 +9,11 @@
 import Foundation
 import SwiftData
 
+enum ConsumableEventKind: String, CaseIterable, Codable {
+    case caffeine
+    case alcohol
+}
+
 @Model
 final class MealLog {
     var id: UUID
@@ -24,14 +29,26 @@ final class MealLog {
         case dinner = "Dinner"
         case eveningSnack = "Evening Snack"
         
-        var icon: String {
+        var symbolName: String {
             switch self {
-            case .breakfast: return "☀️"
-            case .morningSnack: return "☕"
-            case .lunch: return "🍽️"
-            case .afternoonSnack: return "🍎"
-            case .dinner: return "🍴"
-            case .eveningSnack: return "🌙"
+            case .breakfast: return "sunrise.fill"
+            case .morningSnack: return "cup.and.saucer.fill"
+            case .lunch: return "sun.max.fill"
+            case .afternoonSnack: return "leaf.fill"
+            case .dinner: return "moon.stars.fill"
+            case .eveningSnack: return "sparkles"
+            }
+        }
+
+        static var defaultForCurrentTime: MealType {
+            let hour = Calendar.current.component(.hour, from: Date())
+            switch hour {
+            case 5..<10: return .breakfast
+            case 10..<12: return .morningSnack
+            case 12..<14: return .lunch
+            case 14..<17: return .afternoonSnack
+            case 17..<21: return .dinner
+            default: return .eveningSnack
             }
         }
     }
@@ -148,6 +165,16 @@ final class MealLog {
 // MARK: - Computed Properties
 
 extension MealLog {
+    var consumableEventKind: ConsumableEventKind? {
+        if contextTags.contains("caffeine-event") { return .caffeine }
+        if contextTags.contains("alcohol-event") { return .alcohol }
+        return nil
+    }
+    
+    var isConsumableEvent: Bool {
+        consumableEventKind != nil
+    }
+    
     /// Check if this is a high-carb meal (threshold for Sugar Spike detection)
     var isHighCarb: Bool {
         (carbs ?? 0) > 30

@@ -17,23 +17,27 @@ class DashboardDataService: ObservableObject {
     
     // MARK: - Today Metrics
     
-    /// Compute today's summary from meals, insights, workouts, and sleep
-    func computeTodayMetrics(
+    /// Compute a day summary from meals, insights, workouts, and sleep
+    func computeDayMetrics(
         meals: [MealLog],
         insights: [InsightEvent],
         workouts: [WorkoutLog],
-        sleepLogs: [SleepLog]
+        sleepLogs: [SleepLog],
+        date: Date = Date(),
+        healthKitMealCount: Int = 0
     ) -> TodaySummary {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
+        let selectedDay = calendar.startOfDay(for: date)
         
-        // Filter to today's data
-        let todayMeals = meals.filter { calendar.isDate($0.timestamp, inSameDayAs: today) }
-        let todayInsights = insights.filter { calendar.isDate($0.timestamp, inSameDayAs: today) }
-        let todayWorkouts = workouts.filter { calendar.isDate($0.startTime, inSameDayAs: today) }
+        // Filter to selected day's data
+        let todayMeals = meals.filter {
+            calendar.isDate($0.timestamp, inSameDayAs: selectedDay) && !$0.isConsumableEvent
+        }
+        let todayInsights = insights.filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDay) }
+        let todayWorkouts = workouts.filter { calendar.isDate($0.startTime, inSameDayAs: selectedDay) }
         
-        // Sleep from last night (wake time = today)
-        let lastSleep = sleepLogs.first { calendar.isDate($0.endTime, inSameDayAs: today) }
+        // Sleep from last night (wake time = selected day)
+        let lastSleep = sleepLogs.first { calendar.isDate($0.endTime, inSameDayAs: selectedDay) }
         
         // Aggregate macros
         let macros = aggregateMacros(from: todayMeals)
@@ -73,7 +77,24 @@ class DashboardDataService: ObservableObject {
             zone2Minutes: zone2Minutes,
             insights: todayInsights,
             macros: macros,
-            mealCount: todayMeals.count
+            mealCount: resolvedMealCount(localMeals: todayMeals, healthKitMealCount: healthKitMealCount)
+        )
+    }
+    
+    func computeTodayMetrics(
+        meals: [MealLog],
+        insights: [InsightEvent],
+        workouts: [WorkoutLog],
+        sleepLogs: [SleepLog],
+        healthKitMealCount: Int = 0
+    ) -> TodaySummary {
+        computeDayMetrics(
+            meals: meals,
+            insights: insights,
+            workouts: workouts,
+            sleepLogs: sleepLogs,
+            date: Date(),
+            healthKitMealCount: healthKitMealCount
         )
     }
     
@@ -115,7 +136,8 @@ class DashboardDataService: ObservableObject {
         meals: [MealLog],
         insights: [InsightEvent],
         workouts: [WorkoutLog],
-        sleepLogs: [SleepLog]
+        sleepLogs: [SleepLog],
+        healthKitMealCountsByDay: [Date: Int] = [:]
     ) -> WeeklySummary {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -130,9 +152,13 @@ class DashboardDataService: ObservableObject {
         var dailyData: [DailySummary] = []
         for dayOffset in 0..<7 {
             let day = calendar.date(byAdding: .day, value: dayOffset, to: weekStart)!
-            let dayMeals = meals.filter { calendar.isDate($0.timestamp, inSameDayAs: day) }
+            let dayMeals = meals.filter {
+                calendar.isDate($0.timestamp, inSameDayAs: day) && !$0.isConsumableEvent
+            }
             let dayInsights = insights.filter { calendar.isDate($0.timestamp, inSameDayAs: day) }
+            let dayWorkouts = workouts.filter { calendar.isDate($0.startTime, inSameDayAs: day) }
             let daySleep = sleepLogs.first { calendar.isDate($0.endTime, inSameDayAs: day) }
+            let healthKitMealCount = healthKitMealCountsByDay[calendar.startOfDay(for: day)] ?? 0
             
             let macros = aggregateMacros(from: dayMeals)
             let spikes = dayInsights.filter { $0.type == .sugarSpike }.count
@@ -146,7 +172,11 @@ class DashboardDataService: ObservableObject {
                 date: day,
                 calories: dayMeals.reduce(0.0) { $0 + ($1.calories ?? 0) },
                 vibe: vibe,
-                macros: macros
+                macros: macros,
+                mealCount: resolvedMealCount(localMeals: dayMeals, healthKitMealCount: healthKitMealCount),
+                insightCount: dayInsights.count,
+                workoutCount: dayWorkouts.count,
+                hasSleepData: daySleep != nil
             ))
         }
         
@@ -174,7 +204,8 @@ class DashboardDataService: ObservableObject {
         meals: [MealLog],
         insights: [InsightEvent],
         workouts: [WorkoutLog],
-        sleepLogs: [SleepLog]
+        sleepLogs: [SleepLog],
+        healthKitMealCountsByDay: [Date: Int] = [:]
     ) -> MonthlySummary {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -187,8 +218,11 @@ class DashboardDataService: ObservableObject {
             let dayStart = calendar.startOfDay(for: day)
             
             // Check if there's any data for this day
-            let dayMeals = meals.filter { calendar.isDate($0.timestamp, inSameDayAs: day) }
-            guard !dayMeals.isEmpty else { continue }
+            let dayMeals = meals.filter {
+                calendar.isDate($0.timestamp, inSameDayAs: day) && !$0.isConsumableEvent
+            }
+            let healthKitMealCount = healthKitMealCountsByDay[dayStart] ?? 0
+            guard resolvedMealCount(localMeals: dayMeals, healthKitMealCount: healthKitMealCount) > 0 else { continue }
             
             let dayInsights = insights.filter { calendar.isDate($0.timestamp, inSameDayAs: day) }
             let daySleep = sleepLogs.first { calendar.isDate($0.endTime, inSameDayAs: day) }
@@ -215,6 +249,10 @@ class DashboardDataService: ObservableObject {
         )
     }
     
+    private func resolvedMealCount(localMeals: [MealLog], healthKitMealCount: Int) -> Int {
+        max(localMeals.count, healthKitMealCount)
+    }
+    
     // MARK: - Pattern Detection
     
     /// Detect behavioral patterns from recent data
@@ -237,7 +275,7 @@ class DashboardDataService: ObservableObject {
         if weekendLateMeals.count >= 2 {
             patterns.append(Pattern(
                 name: "Weekend Wind-Down",
-                icon: "🌙",
+                icon: .asset("sleep_kawaii"),
                 description: "Late meals detected on weekends",
                 impact: "May affect sleep quality",
                 suggestion: "Try closing the kitchen by 8pm on weekends",
@@ -260,7 +298,7 @@ class DashboardDataService: ObservableObject {
             let ratio = refueledWorkouts.count
             patterns.append(Pattern(
                 name: "Post-Workout Refuel",
-                icon: "💪",
+                icon: .asset("insight_recovery_kawaii"),
                 description: "\(ratio)/\(recentWorkouts.count) workouts followed by nutrition",
                 impact: ratio >= 3 ? "Good recovery potential" : "Could improve muscle recovery",
                 suggestion: ratio >= 3 ? "Keep it up! Your muscles thank you." : "Try eating within 2h of exercise",
@@ -278,7 +316,7 @@ class DashboardDataService: ObservableObject {
         if morningSpikes.count >= 3 {
             patterns.append(Pattern(
                 name: "Morning Rollercoaster",
-                icon: "⚡",
+                icon: .asset("insight_spike_kawaii"),
                 description: "Multiple sugar spikes before noon",
                 impact: "Energy crashes later in the day",
                 suggestion: "Add protein to breakfast to flatten the curve",
@@ -418,4 +456,3 @@ class DashboardDataService: ObservableObject {
         return maxStreak
     }
 }
-
