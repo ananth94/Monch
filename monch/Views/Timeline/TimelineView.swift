@@ -825,18 +825,6 @@ struct InsightTimelineCard: View {
         .contentShape(Rectangle())
     }
     
-    /// Returns the appropriate kawaii icon for the insight type
-    private var insightKawaiiIcon: Image {
-        switch insight.type {
-        case .sugarSpike, .anxietyMimic:
-            return Image("insight_spike_kawaii")
-        case .muscleSponge, .goodSpike, .zone2Drain:
-            return Image("insight_recovery_kawaii")
-        default:
-            return Image("insight_spike_kawaii")
-        }
-    }
-    
     private var insightColor: Color {
         switch insight.type {
         case .sugarSpike, .anxietyMimic: return Color.Monch.coral

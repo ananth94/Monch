@@ -232,8 +232,7 @@ private struct LinkedInsightRow: View {
     
     var body: some View {
         HStack(spacing: Spacing.sm) {
-            Text(insight.type.icon)
-                .font(.title3)
+            MonchIconView(token: insight.type.iconToken, size: 24, tint: insightColor)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(insight.type.displayTitle)
@@ -260,6 +259,9 @@ private struct LinkedInsightRow: View {
         case .caffeineJitter: return Color.Monch.sage
         case .digestionDebt, .deepSleepRobber: return Color.Monch.periwinkle
         case .muscleSponge, .goodSpike, .zone2Drain: return Color.Monch.sage
+        case .recoveryGap, .mealImpactScore, .alcoholImpact: return Color.Monch.coral
+        case .stressBuffer, .fastingBenefit, .morningReadiness: return Color.Monch.sage
+        case .mineralGap, .brainFogForecast: return Color.Monch.periwinkle
         }
     }
 }
