@@ -18,6 +18,8 @@ struct WeekView: View {
     @ObservedObject private var dataService = DashboardDataService.shared
     @ObservedObject private var insightEngine = InsightEngine.shared
     
+    @State private var selectedPattern: Pattern?
+    
     var onSeeEntries: (() -> Void)?
     
     var body: some View {
@@ -50,6 +52,9 @@ struct WeekView: View {
                 }
             }
             .padding(.vertical)
+        }
+        .sheet(item: $selectedPattern) { pattern in
+            PatternDetailView(pattern: pattern)
         }
     }
     
@@ -130,6 +135,9 @@ struct WeekView: View {
             
             ForEach(weeklySummary.patterns) { pattern in
                 PatternCard(pattern: pattern, onSeeEntries: onSeeEntries)
+                    .onTapGesture {
+                        selectedPattern = pattern
+                    }
                     .padding(.horizontal)
             }
         }

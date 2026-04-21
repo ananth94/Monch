@@ -33,6 +33,7 @@ struct TimelineView: View {
     @State private var selectedVibe: VibeCheck?
     @State private var selectedDate: Date = Date()
     @State private var showingDatePicker = false
+    @State private var scrollOffset: CGFloat = 0
     
     var body: some View {
         NavigationStack {
@@ -55,12 +56,25 @@ struct TimelineView: View {
                     .padding(.top, 8)
                     
                     // Timeline Content
-                    if timelineItems.isEmpty {
-                        EmptyTimelineView {
-                            showingFoodLogger = true
+                    GeometryReader { geometry in
+                        ZStack {
+                            // River background with parallax
+                            RiverSplineView(
+                                itemCount: timelineItems.count,
+                                mood: insightEngine.currentMood,
+                                geometry: geometry,
+                                scrollOffset: scrollOffset
+                            )
+                            
+                            // Timeline items
+                            if timelineItems.isEmpty {
+                                EmptyTimelineView {
+                                    showingFoodLogger = true
+                                }
+                            } else {
+                                timelineList
+                            }
                         }
-                    } else {
-                        timelineList
                     }
                 }
             }
@@ -228,9 +242,10 @@ struct TimelineView: View {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 ForEach(groupedByDay, id: \.key) { day, items in
                     Section {
-                        ForEach(items.sorted(by: { $0.timestamp > $1.timestamp })) { item in
+                        ForEach(Array(items.sorted(by: { $0.timestamp > $1.timestamp }).enumerated()), id: \.element.id) { index, item in
                             TimelineItemRow(
                                 item: item,
+                                cardIndex: index,
                                 onMealTap: { selectedMeal = $0 },
                                 onInsightTap: { selectedInsight = $0 },
                                 onWorkoutTap: { selectedWorkout = $0 },
@@ -356,6 +371,7 @@ enum TimelineItem: Identifiable {
 
 struct TimelineItemRow: View {
     let item: TimelineItem
+    var cardIndex: Int = 0
     var onMealTap: ((MealLog) -> Void)?
     var onInsightTap: ((InsightEvent) -> Void)?
     var onWorkoutTap: ((WorkoutLog) -> Void)?
@@ -366,18 +382,23 @@ struct TimelineItemRow: View {
         switch item {
         case .meal(let meal):
             MealCard(meal: meal)
+                .riverCardStyle(index: cardIndex, type: .meal)
                 .onTapGesture { onMealTap?(meal) }
         case .insight(let insight):
             InsightTimelineCard(insight: insight)
+                .riverCardStyle(index: cardIndex, type: .insight)
                 .onTapGesture { onInsightTap?(insight) }
         case .workout(let workout):
             WorkoutTimelineCard(workout: workout)
+                .riverCardStyle(index: cardIndex, type: .workout)
                 .onTapGesture { onWorkoutTap?(workout) }
         case .sleep(let sleep):
             SleepTimelineCard(sleep: sleep)
+                .riverCardStyle(index: cardIndex, type: .sleep)
                 .onTapGesture { onSleepTap?(sleep) }
         case .vibe(let vibe):
             VibeTimelineCard(vibe: vibe)
+                .riverCardStyle(index: cardIndex, type: .vibe)
                 .onTapGesture { onVibeTap?(vibe) }
         }
     }
@@ -394,7 +415,7 @@ struct MealCard: View {
             Image("meal_kawaii")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 32, height: 32)
+                .frame(width: 36, height: 36)
                 .accessibilityLabel("Meal")
             
             // Time
@@ -408,6 +429,7 @@ struct MealCard: View {
                 HStack(spacing: 6) {
                     Text(meal.name)
                         .font(.Monch.headline)
+                        .foregroundStyle(.primary)  // Ensure dark text
                     
                     // Auto-tags as emojis
                     if !meal.autoTags.isEmpty {
@@ -449,10 +471,6 @@ struct MealCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
-        )
         .contentShape(Rectangle())
     }
     
@@ -501,15 +519,23 @@ struct InsightTimelineCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(insightColor.opacity(0.15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(insightColor.opacity(0.3), lineWidth: 1)
-                )
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.lg)
+                .strokeBorder(insightColor.opacity(0.3), lineWidth: 1)
         )
         .contentShape(Rectangle())
+    }
+    
+    /// Returns the appropriate kawaii icon for the insight type
+    private var insightKawaiiIcon: Image {
+        switch insight.type {
+        case .sugarSpike, .anxietyMimic:
+            return Image("insight_spike_kawaii")
+        case .muscleSponge, .goodSpike, .zone2Drain:
+            return Image("insight_recovery_kawaii")
+        default:
+            return Image("insight_spike_kawaii")
+        }
     }
     
     private var insightColor: Color {
@@ -563,7 +589,7 @@ struct WorkoutTimelineCard: View {
             Image("workout_kawaii")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 32, height: 32)
+                .frame(width: 36, height: 36)
                 .accessibilityLabel("Workout")
             
             // Time
@@ -622,10 +648,6 @@ struct WorkoutTimelineCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.Monch.sage.opacity(0.1))
-        )
         .contentShape(Rectangle())
     }
 }
@@ -641,7 +663,7 @@ struct SleepTimelineCard: View {
             Image("sleep_kawaii")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 32, height: 32)
+                .frame(width: 36, height: 36)
                 .accessibilityLabel("Sleep")
             
             // Content
@@ -676,10 +698,6 @@ struct SleepTimelineCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.Monch.periwinkle.opacity(0.1))
-        )
         .contentShape(Rectangle())
     }
 }
@@ -721,13 +739,8 @@ struct VibeTimelineCard: View {
                 }
             }
             
-            Spacer()
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.Monch.periwinkle.opacity(0.1))
-        )
         .contentShape(Rectangle())
     }
 }
@@ -843,4 +856,13 @@ struct DatePickerSheet: View {
 #Preview {
     TimelineView()
         .modelContainer(for: [MealLog.self, InsightEvent.self, WorkoutLog.self, SleepLog.self, VibeCheck.self], inMemory: true)
+}
+
+// MARK: - Scroll Offset Preference Key
+
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }

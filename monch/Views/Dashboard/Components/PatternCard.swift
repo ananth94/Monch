@@ -17,8 +17,7 @@ struct PatternCard: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             // Header
             HStack {
-                Text(pattern.icon)
-                    .font(.title2)
+                MonchIconView(token: pattern.icon, size: 24, tint: patternBorderColor)
                 
                 Text(pattern.name)
                     .font(.Monch.callout)
@@ -109,7 +108,7 @@ struct PatternCard: View {
     VStack {
         PatternCard(pattern: Pattern(
             name: "Weekend Wind-Down",
-            icon: "🌙",
+            icon: .asset("sleep_kawaii"),
             description: "Late meals detected on Fri & Sat",
             impact: "~12% less Deep Sleep on those nights",
             suggestion: "Try closing the kitchen by 8pm on weekends",
@@ -119,7 +118,7 @@ struct PatternCard: View {
         
         PatternCard(pattern: Pattern(
             name: "Post-Workout Refuel",
-            icon: "💪",
+            icon: .asset("insight_recovery_kawaii"),
             description: "4/5 workouts followed by protein",
             impact: "Better recovery correlation",
             suggestion: "Keep it up! Your muscles are responding.",

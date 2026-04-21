@@ -31,6 +31,13 @@ enum AppTab: String, CaseIterable {
 struct MainTabView: View {
     @State private var selectedTab: AppTab = .timeline
     @State private var timelineDate: Date? = nil
+    @State private var showStreakCelebration = false
+    
+    @Query(sort: \MealLog.timestamp, order: .reverse) private var meals: [MealLog]
+    @Query(sort: \InsightEvent.timestamp, order: .reverse) private var insights: [InsightEvent]
+    @Query(sort: \WorkoutLog.startTime, order: .reverse) private var workouts: [WorkoutLog]
+    @Query(sort: \SleepLog.endTime, order: .reverse) private var sleepLogs: [SleepLog]
+    @ObservedObject private var streakTracker = StreakTracker.shared
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -52,6 +59,47 @@ struct MainTabView: View {
                 .tag(AppTab.dashboard)
         }
         .tint(Color.Monch.sage)
+        .onAppear {
+            updateStreak()
+            checkForCelebration()
+        }
+        .onChange(of: loggingSignalVersion) { _, _ in
+            updateStreak()
+            checkForCelebration()
+        }
+        .fullScreenCover(isPresented: $showStreakCelebration) {
+            if let milestone = streakTracker.pendingMilestone {
+                StreakCelebrationView(
+                    milestone: milestone,
+                    streakCount: streakTracker.currentStreak
+                ) {
+                    streakTracker.dismissMilestone()
+                    showStreakCelebration = false
+                }
+            }
+        }
+    }
+    
+    private func checkForCelebration() {
+        if streakTracker.pendingMilestone != nil {
+            // Slight delay for UX
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showStreakCelebration = true
+            }
+        }
+    }
+    
+    private var loggingSignalVersion: Int {
+        meals.count + insights.count + workouts.count + sleepLogs.count
+    }
+    
+    private func updateStreak() {
+        streakTracker.updateStreak(
+            meals: meals,
+            insights: insights.filter { !$0.isDismissed },
+            workouts: workouts,
+            sleepLogs: sleepLogs
+        )
     }
 }
 
