@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import SwiftData
 @testable import monch
 
 final class InsightEngineTests: XCTestCase {
@@ -208,6 +209,375 @@ final class InsightEngineTests: XCTestCase {
         workout5.dominantHRZone = 4
         XCTAssertTrue(engine.qualifyingWorkout(workout5), "Meeting both thresholds should qualify")
     }
+
+    @MainActor
+    func testZone2DrainDetectedFromZoneBreakdown() async throws {
+        let engine = InsightEngine(healthKitProvider: MockHealthKitDataProvider())
+        let context = try makeInMemoryContext()
+
+        let start = Date().addingTimeInterval(-3600)
+        let end = Date()
+        let workout = WorkoutLog(
+            startTime: start,
+            endTime: end,
+            activityTypeRaw: 37,
+            activityName: "Running",
+            activeCalories: 420
+        )
+        workout.setHRZoneBreakdown(HRZoneBreakdown(zone2Minutes: 52))
+
+        let insights = await engine.analyzeWorkout(workout, in: context)
+
+        XCTAssertEqual(insights.count, 1)
+        XCTAssertEqual(insights.first?.type, .zone2Drain)
+    }
+
+    @MainActor
+    func testZone2DrainFallsBackToLongCardioDurationWhenZonesMissing() async throws {
+        let engine = InsightEngine(healthKitProvider: MockHealthKitDataProvider())
+        let context = try makeInMemoryContext()
+
+        let start = Date().addingTimeInterval(-(60 * 60))
+        let end = Date()
+        let workout = WorkoutLog(
+            startTime: start,
+            endTime: end,
+            activityTypeRaw: 37,
+            activityName: "Outdoor Walk",
+            activeCalories: 350
+        )
+
+        let insights = await engine.analyzeWorkout(workout, in: context)
+
+        XCTAssertEqual(insights.count, 1)
+        XCTAssertEqual(insights.first?.type, .zone2Drain)
+    }
+
+    @MainActor
+    func testAnalyzeWorkoutDedupesRepeatedZone2Drain() async throws {
+        let engine = InsightEngine(healthKitProvider: MockHealthKitDataProvider())
+        let context = try makeInMemoryContext()
+
+        let start = Date().addingTimeInterval(-(75 * 60))
+        let end = Date()
+        let workout = WorkoutLog(
+            startTime: start,
+            endTime: end,
+            activityTypeRaw: 37,
+            activityName: "Cycle",
+            activeCalories: 500
+        )
+        workout.dominantHRZone = 2
+
+        let firstRun = await engine.analyzeWorkout(workout, in: context)
+        let secondRun = await engine.analyzeWorkout(workout, in: context)
+        let allInsights = try context.fetch(FetchDescriptor<InsightEvent>())
+
+        XCTAssertEqual(firstRun.count, 1)
+        XCTAssertTrue(secondRun.isEmpty)
+        XCTAssertEqual(allInsights.filter { $0.type == .zone2Drain }.count, 1)
+    }
+
+    @MainActor
+    func testDeepSleepRobberDetectedFromLatestSleepAndLateMeal() async throws {
+        let engine = InsightEngine(healthKitProvider: MockHealthKitDataProvider())
+        let context = try makeInMemoryContext()
+
+        let wakeTime = Date().addingTimeInterval(-60 * 60)
+        let sleepStart = wakeTime.addingTimeInterval(-(8 * 60 * 60))
+        let sleep = SleepLog(
+            startTime: sleepStart,
+            endTime: wakeTime,
+            deepSleepMinutes: 28,
+            remSleepMinutes: 80,
+            lightSleepMinutes: 320
+        )
+        let lateMeal = MealLog(
+            timestamp: sleepStart.addingTimeInterval(-(90 * 60)),
+            name: "Pasta Dinner",
+            calories: 700,
+            carbs: 85,
+            protein: 20,
+            fat: 18
+        )
+
+        context.insert(sleep)
+        context.insert(lateMeal)
+
+        let insight = await engine.detectDeepSleepRobber(in: context)
+
+        XCTAssertNotNil(insight)
+        XCTAssertEqual(insight?.type, .deepSleepRobber)
+        XCTAssertEqual(insight?.associatedMealID, lateMeal.id)
+        XCTAssertTrue(insight?.message.contains("deep sleep") ?? false)
+    }
+
+    @MainActor
+    func testDeepSleepRobberDoesNotFireWithoutLateCulprit() async throws {
+        let engine = InsightEngine(healthKitProvider: MockHealthKitDataProvider())
+        let context = try makeInMemoryContext()
+
+        let wakeTime = Date().addingTimeInterval(-60 * 60)
+        let sleepStart = wakeTime.addingTimeInterval(-(8 * 60 * 60))
+        let sleep = SleepLog(
+            startTime: sleepStart,
+            endTime: wakeTime,
+            deepSleepMinutes: 24,
+            remSleepMinutes: 75,
+            lightSleepMinutes: 340
+        )
+        let lunch = MealLog(
+            timestamp: sleepStart.addingTimeInterval(-(8 * 60 * 60)),
+            name: "Lunch",
+            calories: 550,
+            carbs: 55,
+            protein: 25,
+            fat: 15
+        )
+
+        context.insert(sleep)
+        context.insert(lunch)
+
+        let insight = await engine.detectDeepSleepRobber(in: context)
+
+        XCTAssertNil(insight)
+    }
+
+    @MainActor
+    func testRecoveryGapDetectedWhenCaloriesAreFarBelowBurnAndHRVStaysFlat() async throws {
+        let mockProvider = MockHealthKitDataProvider()
+        let engine = InsightEngine(healthKitProvider: mockProvider)
+        let context = try makeInMemoryContext()
+
+        let workoutEnd = Date().addingTimeInterval(-(10 * 60 * 60))
+        let workoutStart = workoutEnd.addingTimeInterval(-(75 * 60))
+        let workout = WorkoutLog(
+            startTime: workoutStart,
+            endTime: workoutEnd,
+            activityTypeRaw: 50,
+            activityName: "Strength",
+            activeCalories: 500
+        )
+        let snack = MealLog(
+            timestamp: workoutEnd.addingTimeInterval(45 * 60),
+            name: "Tiny Snack",
+            calories: 120,
+            protein: 5
+        )
+
+        mockProvider.hrvSamples = [
+            HRVSample(timestamp: workoutEnd.addingTimeInterval(30 * 60), sdnn: 30),
+            HRVSample(timestamp: workoutEnd.addingTimeInterval(3 * 60 * 60), sdnn: 32)
+        ]
+
+        context.insert(workout)
+        context.insert(snack)
+
+        let insight = await engine.detectRecoveryGap(for: workout, in: context)
+
+        XCTAssertNotNil(insight)
+        XCTAssertEqual(insight?.type, .recoveryGap)
+        XCTAssertTrue(insight?.message.contains("burned 500 kcal") ?? false)
+    }
+
+    @MainActor
+    func testRecoveryGapFallsBackToMissedRefeedAndLowMorningHRV() async throws {
+        let mockProvider = MockHealthKitDataProvider()
+        mockProvider.baselineHRV = 55
+        mockProvider.morningHRV = 42
+        let engine = InsightEngine(healthKitProvider: mockProvider)
+        let context = try makeInMemoryContext()
+
+        let workoutEnd = Date().addingTimeInterval(-(12 * 60 * 60))
+        let workoutStart = workoutEnd.addingTimeInterval(-(60 * 60))
+        let workout = WorkoutLog(
+            startTime: workoutStart,
+            endTime: workoutEnd,
+            activityTypeRaw: 37,
+            activityName: "Run",
+            activeCalories: 420
+        )
+
+        context.insert(workout)
+
+        let insight = await engine.detectRecoveryGap(for: workout, in: context)
+
+        XCTAssertNotNil(insight)
+        XCTAssertEqual(insight?.type, .recoveryGap)
+        XCTAssertTrue(insight?.message.contains("couldn't find a solid refuel") ?? false)
+    }
+
+    @MainActor
+    func testAnalyzeMealCreatesCaffeineJitterForRecentCaffeineEvent() async throws {
+        let mockProvider = MockHealthKitDataProvider()
+        mockProvider.restingHeartRate = 60
+        mockProvider.heartRateSamples = [
+            HeartRateSample(timestamp: Date().addingTimeInterval(-20 * 60), bpm: 82),
+            HeartRateSample(timestamp: Date().addingTimeInterval(-10 * 60), bpm: 84)
+        ]
+        mockProvider.baselineHRV = 50
+        mockProvider.hrvSamples = [
+            HRVSample(timestamp: Date().addingTimeInterval(-20 * 60), sdnn: 49),
+            HRVSample(timestamp: Date().addingTimeInterval(-10 * 60), sdnn: 51)
+        ]
+
+        let engine = InsightEngine(healthKitProvider: mockProvider)
+        let context = try makeInMemoryContext()
+
+        let caffeineEvent = MealLog(
+            timestamp: Date().addingTimeInterval(-15 * 60),
+            name: "Coffee",
+            caffeine: 1,
+            tags: ["caffeine-event"]
+        )
+        context.insert(caffeineEvent)
+
+        let insights = await engine.analyzeMeal(caffeineEvent, in: context)
+        let storedInsights = try context.fetch(FetchDescriptor<InsightEvent>())
+
+        XCTAssertEqual(insights.count, 1)
+        XCTAssertEqual(insights.first?.type, .caffeineJitter)
+        XCTAssertEqual(storedInsights.filter { $0.type == .caffeineJitter }.count, 1)
+    }
+
+    @MainActor
+    func testAnalyzeMealDedupesRepeatedCaffeineJitterSignals() async throws {
+        let mockProvider = MockHealthKitDataProvider()
+        mockProvider.restingHeartRate = 60
+        mockProvider.heartRateSamples = [
+            HeartRateSample(timestamp: Date().addingTimeInterval(-20 * 60), bpm: 83),
+            HeartRateSample(timestamp: Date().addingTimeInterval(-10 * 60), bpm: 85)
+        ]
+        mockProvider.baselineHRV = 52
+        mockProvider.hrvSamples = [
+            HRVSample(timestamp: Date().addingTimeInterval(-20 * 60), sdnn: 51),
+            HRVSample(timestamp: Date().addingTimeInterval(-10 * 60), sdnn: 53)
+        ]
+
+        let engine = InsightEngine(healthKitProvider: mockProvider)
+        let context = try makeInMemoryContext()
+
+        let firstCoffee = MealLog(
+            timestamp: Date().addingTimeInterval(-18 * 60),
+            name: "Coffee",
+            caffeine: 1,
+            tags: ["caffeine-event"]
+        )
+        context.insert(firstCoffee)
+        _ = await engine.analyzeMeal(firstCoffee, in: context)
+
+        let secondCoffee = MealLog(
+            timestamp: Date().addingTimeInterval(-12 * 60),
+            name: "Coffee",
+            caffeine: 1,
+            tags: ["caffeine-event"]
+        )
+        context.insert(secondCoffee)
+        let secondRunInsights = await engine.analyzeMeal(secondCoffee, in: context)
+        let storedInsights = try context.fetch(FetchDescriptor<InsightEvent>())
+
+        XCTAssertTrue(secondRunInsights.isEmpty)
+        XCTAssertEqual(storedInsights.filter { $0.type == .caffeineJitter }.count, 1)
+    }
+
+    @MainActor
+    func testAnalyzeVibeCheckCreatesAnxietyMimicForLowVibeAfterHighCarbMeal() async throws {
+        let mockProvider = MockHealthKitDataProvider()
+        mockProvider.baselineHRV = 50
+
+        let referenceDate = Date()
+        mockProvider.heartRateSamples = [
+            HeartRateSample(timestamp: referenceDate.addingTimeInterval(-30 * 60), bpm: 90),
+            HeartRateSample(timestamp: referenceDate.addingTimeInterval(-15 * 60), bpm: 82),
+            HeartRateSample(timestamp: referenceDate, bpm: 74)
+        ]
+        mockProvider.hrvSamples = [
+            HRVSample(timestamp: referenceDate.addingTimeInterval(-20 * 60), sdnn: 35),
+            HRVSample(timestamp: referenceDate.addingTimeInterval(-10 * 60), sdnn: 37)
+        ]
+
+        let engine = InsightEngine(healthKitProvider: mockProvider)
+        let context = try makeInMemoryContext()
+
+        let meal = MealLog(
+            timestamp: referenceDate.addingTimeInterval(-2.5 * 3600),
+            name: "Bagel",
+            calories: 420,
+            carbs: 65,
+            protein: 10,
+            fat: 8
+        )
+        let vibe = VibeCheck(
+            timestamp: referenceDate,
+            energy: 2,
+            focus: 2,
+            mood: 2,
+            note: "Feel shaky"
+        )
+
+        context.insert(meal)
+        context.insert(vibe)
+
+        let insights = await engine.analyzeVibeCheck(vibe, in: context)
+        let storedInsights = try context.fetch(FetchDescriptor<InsightEvent>())
+
+        XCTAssertEqual(insights.count, 1)
+        XCTAssertEqual(insights.first?.type, .anxietyMimic)
+        XCTAssertEqual(insights.first?.associatedMealID, meal.id)
+        XCTAssertEqual(storedInsights.filter { $0.type == .anxietyMimic }.count, 1)
+    }
+
+    @MainActor
+    func testAnalyzeVibeCheckSkipsAnxietyMimicWhenRecentCaffeineExists() async throws {
+        let mockProvider = MockHealthKitDataProvider()
+        mockProvider.baselineHRV = 50
+
+        let referenceDate = Date()
+        mockProvider.heartRateSamples = [
+            HeartRateSample(timestamp: referenceDate.addingTimeInterval(-30 * 60), bpm: 90),
+            HeartRateSample(timestamp: referenceDate.addingTimeInterval(-15 * 60), bpm: 82),
+            HeartRateSample(timestamp: referenceDate, bpm: 74)
+        ]
+        mockProvider.hrvSamples = [
+            HRVSample(timestamp: referenceDate.addingTimeInterval(-20 * 60), sdnn: 35),
+            HRVSample(timestamp: referenceDate.addingTimeInterval(-10 * 60), sdnn: 37)
+        ]
+
+        let engine = InsightEngine(healthKitProvider: mockProvider)
+        let context = try makeInMemoryContext()
+
+        let meal = MealLog(
+            timestamp: referenceDate.addingTimeInterval(-2.5 * 3600),
+            name: "Bagel",
+            calories: 420,
+            carbs: 65,
+            protein: 10,
+            fat: 8
+        )
+        let caffeineEvent = MealLog(
+            timestamp: referenceDate.addingTimeInterval(-60 * 60),
+            name: "Coffee",
+            caffeine: 1,
+            tags: ["caffeine-event"]
+        )
+        let vibe = VibeCheck(
+            timestamp: referenceDate,
+            energy: 2,
+            focus: 1,
+            mood: 2,
+            note: "Wired and off"
+        )
+
+        context.insert(meal)
+        context.insert(caffeineEvent)
+        context.insert(vibe)
+
+        let insights = await engine.analyzeVibeCheck(vibe, in: context)
+        let storedInsights = try context.fetch(FetchDescriptor<InsightEvent>())
+
+        XCTAssertTrue(insights.isEmpty)
+        XCTAssertTrue(storedInsights.filter { $0.type == .anxietyMimic }.isEmpty)
+    }
 }
 
 // MARK: - Test Helpers
@@ -285,4 +655,19 @@ extension InsightEngine {
             associatedMealID: meal.id
         )
     }
+}
+
+@MainActor
+private func makeInMemoryContext() throws -> ModelContext {
+    let schema = Schema([
+        MealLog.self,
+        InsightEvent.self,
+        SleepLog.self,
+        WorkoutLog.self,
+        VibeCheck.self,
+        MascotStateLog.self
+    ])
+    let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+    let container = try ModelContainer(for: schema, configurations: [configuration])
+    return ModelContext(container)
 }

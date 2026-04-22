@@ -104,7 +104,9 @@ class HealthKitSyncService: ObservableObject {
         let workouts = try await fetchWorkouts(from: sevenDaysAgo, to: now)
         
         for workout in workouts {
-            await upsertWorkoutLog(workout, modelContext: modelContext)
+            if let workoutLog = await upsertWorkoutLog(workout, modelContext: modelContext) {
+                await InsightEngine.shared.analyzeWorkout(workoutLog, in: modelContext)
+            }
         }
         
         lastWorkoutSyncDate = now
@@ -282,7 +284,7 @@ class HealthKitSyncService: ObservableObject {
     // MARK: - Workout Processing
     
     /// Upsert a workout into SwiftData
-    private func upsertWorkoutLog(_ workout: HKWorkout, modelContext: ModelContext) async {
+    private func upsertWorkoutLog(_ workout: HKWorkout, modelContext: ModelContext) async -> WorkoutLog? {
         let workoutStart = workout.startDate
         let predicate = #Predicate<WorkoutLog> { log in
             log.startTime == workoutStart
@@ -296,15 +298,18 @@ class HealthKitSyncService: ObservableObject {
             if let workoutLog = existing.first {
                 // Update existing
                 updateWorkoutLog(workoutLog, from: workout)
+                try modelContext.save()
+                return workoutLog
             } else {
                 // Insert new
                 let workoutLog = createWorkoutLog(from: workout)
                 modelContext.insert(workoutLog)
+                try modelContext.save()
+                return workoutLog
             }
-            
-            try modelContext.save()
         } catch {
             print("HealthKitSyncService: Failed to upsert WorkoutLog - \(error)")
+            return nil
         }
     }
     
