@@ -46,6 +46,7 @@ struct monchApp: App {
                         // Sync health data to local storage for ambient insights
                         let context = sharedModelContainer.mainContext
                         await HealthKitSyncService.shared.syncAll(modelContext: context)
+                        await InsightEngine.shared.runMorningChecksIfNeeded(in: context)
                     }
                 }
         }

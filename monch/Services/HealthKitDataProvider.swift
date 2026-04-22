@@ -238,6 +238,7 @@ final class MockHealthKitDataProvider: HealthKitDataProvider, @unchecked Sendabl
     var heartRateSamples: [HeartRateSample] = []
     var sleepSamples: [SleepSample] = []
     var shouldThrowError = false
+    var restingHeartRate: Double = 65.0
     
     func fetchHeartRateSamples(for range: ClosedRange<Date>) async throws -> [HeartRateSample] {
         if shouldThrowError {
@@ -254,13 +255,14 @@ final class MockHealthKitDataProvider: HealthKitDataProvider, @unchecked Sendabl
     }
     
     func fetchBaselineRestingHeartRate(for range: ClosedRange<Date>) async throws -> Double? {
-        return 65.0 // Mock resting HR
+        return restingHeartRate
     }
     
     // MARK: - HRV Methods (Sprint 12)
     
     var hrvSamples: [HRVSample] = []
     var baselineHRV: Double = 50.0
+    var morningHRV: Double?
     
     func fetchHRVSamples(for range: ClosedRange<Date>) async throws -> [HRVSample] {
         if shouldThrowError {
@@ -280,6 +282,6 @@ final class MockHealthKitDataProvider: HealthKitDataProvider, @unchecked Sendabl
     }
     
     func fetchMorningHRV(for date: Date) async throws -> Double? {
-        return baselineHRV
+        return morningHRV ?? baselineHRV
     }
 }

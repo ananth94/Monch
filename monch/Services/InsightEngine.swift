@@ -14,6 +14,7 @@ import Combine
 @MainActor
 class InsightEngine: ObservableObject {
     static let shared = InsightEngine()
+    private static let lastMorningCheckAnchorKey = "InsightEngine.lastMorningCheckAnchor"
     
     // MARK: - Published State
     
@@ -46,37 +47,128 @@ class InsightEngine: ObservableObject {
         
         // Phase 1: Apply context tags FIRST
         await applyContextTags(to: meal, modelContext: modelContext)
+
+        // Acute stimulant interpretation belongs on the meal/event path so feedback
+        // stays timely for explicit caffeine logs.
+        if meal.consumableEventKind == .caffeine || (meal.caffeine ?? 0) > 0 {
+            let recentMeals = recentMeals(since: Date().addingTimeInterval(-4 * 3600), in: modelContext)
+            if let caffeineJitter = await detectCaffeineJitter(for: recentMeals),
+               persistInsightIfNeeded(caffeineJitter, in: modelContext) {
+                insights.append(caffeineJitter)
+            }
+        }
         
         // Phase 2: Check for Muscle Sponge (post-workout anabolic window)
         if let muscleSponge = await detectMuscleSponge(for: meal, modelContext: modelContext) {
-            insights.append(muscleSponge)
-            modelContext.insert(muscleSponge)
-            // Send notification for positive reinforcement
-            NotificationManager.shared.notifyMuscleSponge()
+            if persistInsightIfNeeded(muscleSponge, in: modelContext) {
+                insights.append(muscleSponge)
+                // Send notification for positive reinforcement
+                NotificationManager.shared.notifyMuscleSponge()
+            }
         }
         
         // Phase 3: Check for Sugar Spike (with Good Spike suppression)
         // Skip if in exercise context OR if meal is tagged as "refeed"
         if !meal.autoTags.contains("refeed") {
             if let sugarSpike = await detectSugarSpike(for: meal, modelContext: modelContext) {
-                insights.append(sugarSpike)
-                modelContext.insert(sugarSpike)
-                // Send notification alert
-                NotificationManager.shared.notifySugarSpike(mealName: meal.name)
+                if persistInsightIfNeeded(sugarSpike, in: modelContext) {
+                    insights.append(sugarSpike)
+                    // Send notification alert
+                    NotificationManager.shared.notifySugarSpike(mealName: meal.name)
+                }
             }
         }
         
         // Phase 4: Check for Digestion Debt (late eating)
         if let digestionDebt = await detectDigestionDebt(for: meal) {
-            insights.append(digestionDebt)
-            modelContext.insert(digestionDebt)
-            // Send notification (will appear next morning)
-            NotificationManager.shared.notifyDigestionDebt()
+            if persistInsightIfNeeded(digestionDebt, in: modelContext) {
+                insights.append(digestionDebt)
+                // Send notification (will appear next morning)
+                NotificationManager.shared.notifyDigestionDebt()
+            }
         }
         
         // Update mascot mood based on insights
         updateMood(from: insights, meal: meal)
         
+        return insights
+    }
+
+    /// Analyze a workout and generate workout-context insights.
+    /// Call after logging or syncing a workout.
+    @discardableResult
+    func analyzeWorkout(_ workout: WorkoutLog, in modelContext: ModelContext) async -> [InsightEvent] {
+        var insights: [InsightEvent] = []
+
+        if let zone2Drain = detectZone2Drain(for: workout),
+           persistInsightIfNeeded(zone2Drain, in: modelContext) {
+            insights.append(zone2Drain)
+        }
+
+        if let latestInsight = insights.max(by: { $0.timestamp < $1.timestamp }) {
+            currentMood = moodFromInsight(latestInsight.type)
+        }
+
+        return insights
+    }
+
+    /// Analyze a subjective vibe check against recent meal and biomarker context.
+    /// This is the safest runtime path for Anxiety Mimic because it anchors the
+    /// inference to an explicit "I feel off" moment instead of guessing from meals alone.
+    @discardableResult
+    func analyzeVibeCheck(_ vibe: VibeCheck, in modelContext: ModelContext) async -> [InsightEvent] {
+        var insights: [InsightEvent] = []
+
+        // Keep the trigger conservative: only inspect meal-driven anxiety mimic when
+        // the user reports a noticeably low energy/focus state.
+        guard vibe.energy <= 2 || vibe.focus <= 2 || vibe.average <= 2.5 else {
+            return insights
+        }
+
+        let referenceDate = vibe.timestamp
+        let mealWindowStart = referenceDate.addingTimeInterval(-3.5 * 3600)
+        let mealWindowEnd = referenceDate.addingTimeInterval(-2 * 3600)
+        let candidateMeals = recentMeals(since: mealWindowStart, until: mealWindowEnd, in: modelContext)
+            .filter { !$0.isConsumableEvent }
+            .filter { ($0.carbs ?? 0) > 40 || $0.autoTags.contains("high-carb") }
+
+        // If a recent caffeine event exists, prefer the stimulant interpretation path
+        // and avoid surfacing an overly confident blood-sugar explanation.
+        let recentConsumables = recentMeals(since: referenceDate.addingTimeInterval(-4 * 3600), until: referenceDate, in: modelContext)
+        let hasRecentCaffeine = recentConsumables.contains { meal in
+            meal.consumableEventKind == .caffeine || (meal.caffeine ?? 0) > 0
+        }
+        guard !hasRecentCaffeine else { return insights }
+
+        for meal in candidateMeals.sorted(by: { $0.timestamp > $1.timestamp }) {
+            if let anxietyMimic = await detectAnxietyMimic(for: meal, in: modelContext, at: referenceDate),
+               persistInsightIfNeeded(anxietyMimic, in: modelContext) {
+                insights.append(anxietyMimic)
+                break
+            }
+        }
+
+        if let latestInsight = insights.max(by: { $0.timestamp < $1.timestamp }) {
+            currentMood = moodFromInsight(latestInsight.type)
+        }
+
+        return insights
+    }
+
+    /// Run daily morning checks once per day after sleep data is available.
+    @discardableResult
+    func runMorningChecksIfNeeded(in modelContext: ModelContext, now: Date = Date()) async -> [InsightEvent] {
+        let latestSleepEnd = latestCompletedSleepEnd(in: modelContext, now: now)
+        let anchor = latestSleepEnd ?? now
+
+        if let lastAnchor = UserDefaults.standard.object(forKey: Self.lastMorningCheckAnchorKey) as? Date,
+           lastAnchor >= anchor,
+           Calendar.current.isDate(lastAnchor, inSameDayAs: now) {
+            return []
+        }
+
+        let insights = await runMorningChecks(in: modelContext, now: now)
+        UserDefaults.standard.set(anchor, forKey: Self.lastMorningCheckAnchorKey)
         return insights
     }
     
@@ -439,15 +531,15 @@ class InsightEngine: ObservableObject {
     /// Detects when low blood sugar mimics anxiety symptoms
     /// Algorithm: 2-3h after high-carb meal + HR dropping + HRV low
     /// Sprint 12: Now includes HRV confirmation for higher confidence
-    func detectAnxietyMimic(for meal: MealLog, in modelContext: ModelContext) async -> InsightEvent? {
+    func detectAnxietyMimic(for meal: MealLog, in modelContext: ModelContext, at referenceDate: Date = Date()) async -> InsightEvent? {
         // Trigger: high carb meal 2-3 hours ago
         guard let carbs = meal.carbs, carbs > 40 else { return nil }
         
-        let hoursSinceMeal = Date().timeIntervalSince(meal.timestamp) / 3600
+        let hoursSinceMeal = referenceDate.timeIntervalSince(meal.timestamp) / 3600
         guard hoursSinceMeal >= 2 && hoursSinceMeal <= 3.5 else { return nil }
         
         // Check for HR gradient (dropping) - simplified heuristic
-        let recentRange = Date().addingTimeInterval(-1800)...Date()
+        let recentRange = referenceDate.addingTimeInterval(-1800)...referenceDate
         
         do {
             let recentHR = try await healthKitProvider.fetchHeartRateSamples(for: recentRange)
@@ -464,7 +556,7 @@ class InsightEngine: ObservableObject {
             
             // Sprint 12: Add HRV confirmation
             let recentHRV = try await healthKitProvider.fetchHRVSamples(for: recentRange)
-            let baselineRange = Date().addingTimeInterval(-7 * 24 * 3600)...Date()
+            let baselineRange = referenceDate.addingTimeInterval(-7 * 24 * 3600)...referenceDate
             let baselineHRV = try await healthKitProvider.fetchBaselineHRV(for: baselineRange) ?? 50.0
             
             let currentHRV: Double
@@ -482,7 +574,7 @@ class InsightEngine: ObservableObject {
             // Requires BOTH HR dropping AND HRV suppressed for high confidence
             if gradient < -1.0 && hrvSuppressed {
                 return InsightEvent(
-                    timestamp: Date(),
+                    timestamp: referenceDate,
                     type: .anxietyMimic,
                     severity: min(abs(gradient) / 5, 1.0),
                     message: "Feeling anxious? Your HRV is \(hrvDeficit)% below normal—likely a blood sugar dip from \(meal.name), not stress.",
@@ -491,7 +583,7 @@ class InsightEngine: ObservableObject {
             } else if gradient < -2.0 {
                 // Very rapid drop even without HRV confirmation
                 return InsightEvent(
-                    timestamp: Date(),
+                    timestamp: referenceDate,
                     type: .anxietyMimic,
                     severity: min(abs(gradient) / 5, 0.7), // Lower severity without HRV
                     message: "Feeling jittery? It might be a blood sugar dip from \(meal.name). Try a small snack.",
@@ -581,11 +673,17 @@ class InsightEngine: ObservableObject {
     func detectZone2Drain(for workout: WorkoutLog) -> InsightEvent? {
         // Check for cardio type
         guard workout.category == .cardio else { return nil }
-        
-        // Check for Zone 2 duration via zone breakdown
-        guard let breakdown = workout.hrZoneBreakdown else { return nil }
-        let zone2Minutes = breakdown.zone2Minutes
-        
+
+        let zone2Minutes: Int
+        if let breakdown = workout.hrZoneBreakdown, breakdown.zone2Minutes > 0 {
+            zone2Minutes = breakdown.zone2Minutes
+        } else if workout.dominantHRZone == 2 {
+            zone2Minutes = Int(workout.duration / 60)
+        } else {
+            // Fallback for steady cardio sessions when granular zone data is missing.
+            zone2Minutes = Int(workout.duration / 60)
+        }
+
         guard zone2Minutes >= 45 else { return nil }
         
         return InsightEvent(
@@ -599,55 +697,79 @@ class InsightEngine: ObservableObject {
     
     // MARK: - Deep Sleep Robber Detection (P1)
     
-    /// Detects chronic patterns that erode deep sleep
-    /// Algorithm: 7-day rolling window with avg deep sleep <45 min + late meals/caffeine
+    /// Detects overnight deep-sleep disruption likely related to late intake.
+    /// Intelligence v1 uses a practical proxy model:
+    /// - latest completed sleep session has poor deep sleep
+    /// - a plausible late culprit exists before sleep (late meal or afternoon/evening caffeine)
     func detectDeepSleepRobber(in modelContext: ModelContext) async -> InsightEvent? {
-        let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
-        
-        // Fetch recent sleep logs
+        let now = Date()
+        let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: now) ?? now
+
         let sleepPredicate = #Predicate<SleepLog> { sleep in
-            sleep.startTime > sevenDaysAgo
+            sleep.endTime <= now && sleep.endTime >= twoDaysAgo
         }
-        
-        let mealPredicate = #Predicate<MealLog> { meal in
-            meal.timestamp > sevenDaysAgo
-        }
-        
+
         do {
             let sleepLogs = try modelContext.fetch(FetchDescriptor<SleepLog>(predicate: sleepPredicate))
-            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
-            
-            guard sleepLogs.count >= 4 else { return nil } // Relaxed to 4 days
-            
-            // Calculate average deep sleep
-            let deepSleepMinutes = sleepLogs.map { Double($0.deepSleepMinutes) }.reduce(0, +)
-            let avgDeepSleep = deepSleepMinutes / Double(sleepLogs.count)
-            
-            guard avgDeepSleep < 45 else { return nil }
-            
-            // Count late meals (after 9pm)
-            let lateMeals = meals.filter { meal in
-                let hour = Calendar.current.component(.hour, from: meal.timestamp)
-                return hour >= 21 || hour < 5
-            }.count
-            
-            // Count late caffeine (after 2pm)
-            let lateCaffeine = meals.filter { meal in
-                let hour = Calendar.current.component(.hour, from: meal.timestamp)
-                return hour >= 14 && (meal.caffeine ?? 0) > 0
-            }.count
-            
-            if lateMeals >= 3 || lateCaffeine >= 3 {
-                let culprit = lateMeals > lateCaffeine ? "late meals" : "afternoon caffeine"
-                
-                return InsightEvent(
-                    timestamp: Date(),
-                    type: .deepSleepRobber,
-                    severity: min((45 - avgDeepSleep) / 30, 1.0),
-                    message: "Your deep sleep has been under 45 min for a week. Those \(culprit) might be the culprit.",
-                    associatedMealID: nil
-                )
+            guard let latestSleep = sleepLogs.max(by: { $0.endTime < $1.endTime }) else { return nil }
+            guard latestSleep.deepSleepMinutes > 0 else { return nil }
+            guard latestSleep.deepSleepMinutes < 45 else { return nil }
+
+            let sleepStart = latestSleep.startTime
+            let mealWindowStart = sleepStart.addingTimeInterval(-6 * 60 * 60)
+            let mealPredicate = #Predicate<MealLog> { meal in
+                meal.timestamp >= mealWindowStart && meal.timestamp <= sleepStart
             }
+            let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
+
+            let latestLateMeal = meals
+                .filter { meal in
+                    guard !meal.isConsumableEvent else { return false }
+                    let hour = Calendar.current.component(.hour, from: meal.timestamp)
+                    let closeToSleep = latestSleep.startTime.timeIntervalSince(meal.timestamp) <= (3 * 60 * 60)
+                    return closeToSleep || hour >= 21 || hour < 5
+                }
+                .sorted { $0.timestamp > $1.timestamp }
+                .first
+
+            let latestLateCaffeine = meals
+                .filter { meal in
+                    let hour = Calendar.current.component(.hour, from: meal.timestamp)
+                    return (meal.caffeine ?? 0) > 0 && hour >= 14
+                }
+                .sorted { $0.timestamp > $1.timestamp }
+                .first
+
+            let culprit: MealLog?
+            let message: String
+
+            if let lateMeal = latestLateMeal {
+                let hoursBeforeSleep = max(0, Int(round(latestSleep.startTime.timeIntervalSince(lateMeal.timestamp) / 3600)))
+                culprit = lateMeal
+                message = "Your deep sleep was only \(latestSleep.deepSleepMinutes) minutes last night. That \(lateMeal.name.lowercased()) \(hoursBeforeSleep == 0 ? "right before bed" : "\(hoursBeforeSleep)h before sleep") may have kept recovery light."
+            } else if let lateCaffeine = latestLateCaffeine {
+                culprit = lateCaffeine
+                message = "Your deep sleep was only \(latestSleep.deepSleepMinutes) minutes last night. That late \(lateCaffeine.name.lowercased()) may have kept your system too alert for deeper recovery."
+            } else {
+                return nil
+            }
+
+            let baseSeverity = min(Double(45 - latestSleep.deepSleepMinutes) / 30.0, 1.0)
+            let proximityBonus: Double
+            if let culprit {
+                let hoursFromCulprit = latestSleep.startTime.timeIntervalSince(culprit.timestamp) / 3600
+                proximityBonus = hoursFromCulprit <= 3 ? 0.15 : 0
+            } else {
+                proximityBonus = 0
+            }
+
+            return InsightEvent(
+                timestamp: latestSleep.endTime,
+                type: .deepSleepRobber,
+                severity: min(baseSeverity + proximityBonus, 1.0),
+                message: message,
+                associatedMealID: culprit?.id
+            )
         } catch {
             print("InsightEngine: Deep Sleep Robber detection failed: \(error)")
         }
@@ -663,46 +785,74 @@ class InsightEngine: ObservableObject {
         let workoutEnd = workout.endTime
         let now = Date()
         
-        // Must be at least 1 hour post-workout
-        guard now.timeIntervalSince(workoutEnd) > 3600 else { return nil }
+        // Evaluate only after the acute workout period but before the signal goes stale.
+        let hoursSinceWorkout = now.timeIntervalSince(workoutEnd) / 3600
+        guard hoursSinceWorkout >= 6 && hoursSinceWorkout <= 36 else { return nil }
+        guard (workout.activeCalories ?? 0) > 300 || workout.triggersAnabolicWindow else { return nil }
         
-        // Check caloric intake since workout
+        let refeedWindowEnd = workoutEnd.addingTimeInterval(2 * 60 * 60)
         let mealPredicate = #Predicate<MealLog> { meal in
             meal.timestamp > workoutEnd
         }
         
         do {
             let meals = try modelContext.fetch(FetchDescriptor<MealLog>(predicate: mealPredicate))
-            let caloriesConsumed = meals.compactMap { $0.calories }.reduce(0, +)
+            let caloriesConsumed = meals
+                .filter { $0.timestamp <= refeedWindowEnd }
+                .compactMap { $0.calories }
+                .reduce(0, +)
             let caloriesBurned = workout.activeCalories ?? 0
-            
-            // Under-fueled if consumed < 50% of burned
-            guard caloriesBurned > 300 && caloriesConsumed < caloriesBurned * 0.5 else { return nil }
-            
-            // Check HRV recovery slope (should rise post-workout)
-            let recoveryRange = workoutEnd...min(workoutEnd.addingTimeInterval(3600), now)
-            let recoveryHRV = try await healthKitProvider.fetchHRVSamples(for: recoveryRange)
-            
-            guard recoveryHRV.count >= 2 else { return nil }
-            
-            let sortedHRV = recoveryHRV.sorted { $0.timestamp < $1.timestamp }
-            let first = sortedHRV.first!.sdnn
-            let last = sortedHRV.last!.sdnn
-            let timeDelta = sortedHRV.last!.timestamp.timeIntervalSince(sortedHRV.first!.timestamp) / 3600
-            guard timeDelta > 0 else { return nil }
-            
-            let slope = (last - first) / timeDelta
-            
-            // Slow recovery = slope < 5 ms/hour
-            if slope < 5 {
-                return InsightEvent(
-                    timestamp: Date(),
-                    type: .recoveryGap,
-                    severity: min(1.0 - slope / 10, 1.0),
-                    message: "Your HRV isn't bouncing back. You burned \(Int(caloriesBurned)) kcal but only ate \(Int(caloriesConsumed)). Fuel up!",
-                    associatedMealID: nil
-                )
+
+            let recentMeals = meals.filter { $0.timestamp <= refeedWindowEnd && !$0.isConsumableEvent }
+            let hasRefeedContext = recentMeals.contains { meal in
+                meal.autoTags.contains("refeed") || meal.protein != nil || meal.carbs != nil
             }
+            let underFueledByCalories = caloriesBurned > 300 && caloriesConsumed > 0 && caloriesConsumed < caloriesBurned * 0.5
+            let missedRefeedWindow = recentMeals.isEmpty || !hasRefeedContext
+
+            guard underFueledByCalories || missedRefeedWindow else { return nil }
+
+            let recoveryRange = workoutEnd...min(workoutEnd.addingTimeInterval(6 * 3600), now)
+            let recoveryHRV = try await healthKitProvider.fetchHRVSamples(for: recoveryRange)
+
+            let hasSlowHRVRecovery: Bool
+            var severity = 0.45
+            if recoveryHRV.count >= 2 {
+                let sortedHRV = recoveryHRV.sorted { $0.timestamp < $1.timestamp }
+                let first = sortedHRV.first!.sdnn
+                let last = sortedHRV.last!.sdnn
+                let timeDelta = sortedHRV.last!.timestamp.timeIntervalSince(sortedHRV.first!.timestamp) / 3600
+                let slope = timeDelta > 0 ? (last - first) / timeDelta : 0
+                hasSlowHRVRecovery = slope < 5
+                severity = min(max(0.35, 1.0 - slope / 10), 1.0)
+            } else {
+                let baselineRange = now.addingTimeInterval(-7 * 24 * 3600)...now
+                if let baseline = try await healthKitProvider.fetchBaselineHRV(for: baselineRange),
+                   let morningHRV = try await healthKitProvider.fetchMorningHRV(for: now) {
+                    hasSlowHRVRecovery = morningHRV < baseline * 0.9
+                    let deficit = max(0, (baseline - morningHRV) / max(baseline, 1))
+                    severity = min(0.45 + deficit, 1.0)
+                } else {
+                    hasSlowHRVRecovery = false
+                }
+            }
+
+            guard hasSlowHRVRecovery else { return nil }
+
+            let refuelMessage: String
+            if underFueledByCalories {
+                refuelMessage = "You burned \(Int(caloriesBurned)) kcal but only refueled about \(Int(caloriesConsumed))."
+            } else {
+                refuelMessage = "You had a hard session and Monch couldn't find a solid refuel in the first couple of hours."
+            }
+
+            return InsightEvent(
+                timestamp: now,
+                type: .recoveryGap,
+                severity: severity,
+                message: "\(refuelMessage) Recovery still looks heavy this morning. This may be a fuel problem more than a rest problem.",
+                associatedMealID: nil
+            )
         } catch {
             print("InsightEngine: Recovery Gap detection failed: \(error)")
         }
@@ -1013,39 +1163,48 @@ class InsightEngine: ObservableObject {
     // MARK: - Integration: Scheduled Checks
     
     /// Run morning insight checks (call from app launch)
-    func runMorningChecks(in modelContext: ModelContext) async -> [InsightEvent] {
+    func runMorningChecks(in modelContext: ModelContext, now: Date = Date()) async -> [InsightEvent] {
         var insights: [InsightEvent] = []
-        
-        // Morning Readiness
-        if let readiness = await detectMorningReadiness() {
-            insights.append(readiness)
-            modelContext.insert(readiness)
+
+        // Intelligence v1 keeps the morning path intentionally narrow:
+        // use it to surface sleep disruption and overnight workout recovery
+        // without activating the broader dormant HRV layer yet.
+        if let deepSleepRobber = await detectDeepSleepRobber(in: modelContext),
+           persistInsightIfNeeded(deepSleepRobber, in: modelContext) {
+            insights.append(deepSleepRobber)
         }
-        
-        // Brain Fog Forecast (if HRV is significantly below baseline)
-        if let brainFog = await detectBrainFogForecast() {
-            insights.append(brainFog)
-            modelContext.insert(brainFog)
+
+        let recentWorkoutRangeStart = now.addingTimeInterval(-36 * 3600)
+        let workoutPredicate = #Predicate<WorkoutLog> { workout in
+            workout.endTime >= recentWorkoutRangeStart && workout.endTime <= now
         }
-        
-        // Alcohol Impact (if overnight HRV was suppressed)
-        if let alcohol = await detectAlcoholImpact(in: modelContext) {
-            insights.append(alcohol)
-            modelContext.insert(alcohol)
+
+        do {
+            let recentWorkouts = try modelContext.fetch(
+                FetchDescriptor<WorkoutLog>(
+                    predicate: workoutPredicate,
+                    sortBy: [SortDescriptor(\.endTime, order: .reverse)]
+                )
+            )
+
+            for workout in recentWorkouts {
+                if let recoveryGap = await detectRecoveryGap(for: workout, in: modelContext),
+                   persistInsightIfNeeded(recoveryGap, in: modelContext) {
+                    insights.append(recoveryGap)
+                    break
+                }
+            }
+        } catch {
+            print("InsightEngine: Morning recovery evaluation failed: \(error)")
         }
-        
-        // Fasting Benefit (if applicable)
-        if let fasting = await detectFastingBenefit(in: modelContext) {
-            insights.append(fasting)
-            modelContext.insert(fasting)
+
+        if let latestInsight = insights.max(by: { $0.timestamp < $1.timestamp }) {
+            currentMood = moodFromInsight(latestInsight.type)
+        } else if !hasInsight(.deepSleepRobber, on: now, in: modelContext)
+                    && !hasInsight(.recoveryGap, on: now, in: modelContext) {
+            refreshMood(meals: [], insights: [])
         }
-        
-        // Stress Buffer (end of day check - can also run in evening)
-        if let stress = await detectStressBuffer(in: modelContext) {
-            insights.append(stress)
-            modelContext.insert(stress)
-        }
-        
+
         return insights
     }
     
@@ -1064,5 +1223,102 @@ class InsightEngine: ObservableObject {
         }
         
         return insights
+    }
+
+    // MARK: - Insight Persistence
+
+    private func persistInsightIfNeeded(_ insight: InsightEvent, in modelContext: ModelContext) -> Bool {
+        if isDuplicateInsight(insight, in: modelContext) {
+            return false
+        }
+
+        modelContext.insert(insight)
+        pendingInsights.append(insight)
+        return true
+    }
+
+    private func isDuplicateInsight(_ insight: InsightEvent, in modelContext: ModelContext) -> Bool {
+        let windowStart = insight.timestamp.addingTimeInterval(-30 * 60)
+        let windowEnd = insight.timestamp.addingTimeInterval(30 * 60)
+        let predicate = #Predicate<InsightEvent> { existing in
+            existing.timestamp >= windowStart && existing.timestamp <= windowEnd
+        }
+
+        do {
+            let nearbyInsights = try modelContext.fetch(FetchDescriptor<InsightEvent>(predicate: predicate))
+            return nearbyInsights.contains { existing in
+                guard existing.type == insight.type else { return false }
+
+                if insight.type == .caffeineJitter {
+                    return abs(existing.timestamp.timeIntervalSince(insight.timestamp)) <= 30 * 60
+                }
+
+                if let associatedMealID = insight.associatedMealID {
+                    return existing.associatedMealID == associatedMealID
+                }
+
+                return abs(existing.timestamp.timeIntervalSince(insight.timestamp)) <= 30 * 60
+            }
+        } catch {
+            print("InsightEngine: Failed to dedupe insight - \(error)")
+            return false
+        }
+    }
+
+    private func recentMeals(since startDate: Date, in modelContext: ModelContext, now: Date = Date()) -> [MealLog] {
+        recentMeals(since: startDate, until: now, in: modelContext)
+    }
+
+    private func recentMeals(since startDate: Date, until endDate: Date, in modelContext: ModelContext) -> [MealLog] {
+        let predicate = #Predicate<MealLog> { meal in
+            meal.timestamp >= startDate && meal.timestamp <= endDate
+        }
+
+        do {
+            return try modelContext.fetch(
+                FetchDescriptor<MealLog>(
+                    predicate: predicate,
+                    sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+                )
+            )
+        } catch {
+            print("InsightEngine: Failed to fetch recent meals - \(error)")
+            return []
+        }
+    }
+
+    private func latestCompletedSleepEnd(in modelContext: ModelContext, now: Date) -> Date? {
+        let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: now) ?? now
+        let predicate = #Predicate<SleepLog> { sleep in
+            sleep.endTime <= now && sleep.endTime >= twoDaysAgo
+        }
+
+        do {
+            return try modelContext.fetch(
+                FetchDescriptor<SleepLog>(
+                    predicate: predicate,
+                    sortBy: [SortDescriptor(\.endTime, order: .reverse)]
+                )
+            ).first?.endTime
+        } catch {
+            print("InsightEngine: Failed to fetch latest completed sleep - \(error)")
+            return nil
+        }
+    }
+
+    private func hasInsight(_ type: InsightType, on day: Date, in modelContext: ModelContext) -> Bool {
+        let startOfDay = Calendar.current.startOfDay(for: day)
+        let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: startOfDay) ?? day
+        let predicate = #Predicate<InsightEvent> { existing in
+            existing.timestamp >= startOfDay && existing.timestamp < endOfDay
+        }
+
+        do {
+            let dayInsights = try modelContext.fetch(FetchDescriptor<InsightEvent>(predicate: predicate))
+            return dayInsights.contains { $0.type == type }
+        } catch {
+            print("InsightEngine: Failed to check existing insight state - \(error)")
+            return false
+        }
     }
 }

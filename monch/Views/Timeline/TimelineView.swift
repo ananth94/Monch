@@ -159,14 +159,18 @@ struct TimelineView: View {
             }
             .sheet(isPresented: $showingExerciseLogger) {
                 ExerciseLogView { workout in
-                    // Trigger muscle sponge check via insight engine
-                    insightEngine.refreshMood(meals: meals, insights: insights)
+                    Task { @MainActor in
+                        await insightEngine.analyzeWorkout(workout, in: modelContext)
+                        insightEngine.refreshMood(meals: meals, insights: insights)
+                    }
                 }
             }
             .sheet(isPresented: $showingSleepLogger) {
                 SleepLogView { _ in
-                    // Sleep logged, refresh timeline
-                    insightEngine.refreshMood(meals: meals, insights: insights)
+                    Task { @MainActor in
+                        await insightEngine.runMorningChecksIfNeeded(in: modelContext)
+                        insightEngine.refreshMood(meals: meals, insights: insights)
+                    }
                 }
             }
             .sheet(isPresented: $showingCaffeineLogger) {
@@ -180,7 +184,12 @@ struct TimelineView: View {
                 AlcoholQuickAddView()
             }
             .sheet(isPresented: $showingVibeCheck) {
-                VibeCheckView()
+                VibeCheckView { vibe in
+                    Task { @MainActor in
+                        await insightEngine.analyzeVibeCheck(vibe, in: modelContext)
+                        insightEngine.refreshMood(meals: meals, insights: insights)
+                    }
+                }
             }
             .onAppear {
                 insightEngine.refreshMood(meals: meals, insights: insights)
